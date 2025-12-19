@@ -147,12 +147,13 @@ void KickAccount::saveToSettings()
 {
     QSettings settings;
 
+    settings.setValue(SETTINGS_KEY_USERNAME, this->username_);  // Save username!
     settings.setValue(SETTINGS_KEY_ACCESS_TOKEN, this->accessToken_);
     settings.setValue(SETTINGS_KEY_REFRESH_TOKEN, this->refreshToken_);
     settings.setValue(SETTINGS_KEY_EXPIRES_AT, this->expiresAt_.toString(Qt::ISODate));
     settings.setValue(SETTINGS_KEY_USER_ID, this->userId_);
 
-    qCDebug(chatterinoKick) << "Kick account credentials saved to settings";
+    qCDebug(chatterinoKick) << "Kick account saved:" << this->username_;
 }
 
 std::shared_ptr<KickAccount> KickAccount::loadFromSettings()
