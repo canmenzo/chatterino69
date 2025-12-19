@@ -113,17 +113,21 @@ QString KickOAuthFlow::buildAuthorizationUrl() const
     QUrl url(KICK_AUTH_URL);
     QUrlQuery query;
 
-    // Check for custom client ID from environment variable
-    // Users with registered Kick apps can set CHATTERINO_KICK_CLIENT_ID
-    QString clientId = qEnvironmentVariable("CHATTERINO_KICK_CLIENT_ID", "");
+    // Get client ID: compile-time define > environment variable > fallback
+    QString clientId;
+#ifdef CHATTERINO_KICK_CLIENT_ID
+    clientId = QStringLiteral(CHATTERINO_KICK_CLIENT_ID);
+#endif
     if (clientId.isEmpty())
     {
-        // Fallback to placeholder - will likely fail without a registered app
-        clientId = "chatterino7";
+        clientId = qEnvironmentVariable("CHATTERINO_KICK_CLIENT_ID", "");
+    }
+    if (clientId.isEmpty())
+    {
         qCWarning(chatterinoKick)
-            << "No CHATTERINO_KICK_CLIENT_ID set. Kick OAuth requires a "
-               "registered application. Set CHATTERINO_KICK_CLIENT_ID "
-               "environment variable with your app's client ID.";
+            << "No Kick Client ID configured. Kick OAuth will not work. "
+               "Set CHATTERINO_KICK_CLIENT_ID environment variable or rebuild "
+               "with -DCHATTERINO_KICK_CLIENT_ID=...";
     }
 
     query.addQueryItem("response_type", "code");
@@ -356,16 +360,32 @@ void KickOAuthFlow::exchangeCodeForTokens(const QString &code)
 {
     qCDebug(chatterinoKick) << "Exchanging authorization code for tokens...";
 
-    // Get client credentials from environment variables
-    QString clientId = qEnvironmentVariable("CHATTERINO_KICK_CLIENT_ID", "");
-    QString clientSecret = qEnvironmentVariable("CHATTERINO_KICK_CLIENT_SECRET", "");
+    // Get client credentials: compile-time define > environment variable
+    QString clientId;
+    QString clientSecret;
+    
+#ifdef CHATTERINO_KICK_CLIENT_ID
+    clientId = QStringLiteral(CHATTERINO_KICK_CLIENT_ID);
+#endif
+    if (clientId.isEmpty())
+    {
+        clientId = qEnvironmentVariable("CHATTERINO_KICK_CLIENT_ID", "");
+    }
+    
+#ifdef CHATTERINO_KICK_CLIENT_SECRET
+    clientSecret = QStringLiteral(CHATTERINO_KICK_CLIENT_SECRET);
+#endif
+    if (clientSecret.isEmpty())
+    {
+        clientSecret = qEnvironmentVariable("CHATTERINO_KICK_CLIENT_SECRET", "");
+    }
 
     if (clientId.isEmpty())
     {
         qCWarning(chatterinoKick)
-            << "CHATTERINO_KICK_CLIENT_ID not set. Token exchange will fail.";
+            << "No Kick Client ID configured. Token exchange will fail.";
         this->authenticationFailed.invoke(
-            "Missing CHATTERINO_KICK_CLIENT_ID environment variable");
+            "Missing Kick Client ID - rebuild with credentials or set environment variable");
         this->cancel();
         return;
     }

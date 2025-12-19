@@ -39,6 +39,12 @@ add_feature_info("Chatterino code sanitizer support" CHATTERINO_SANITIZER_SUPPOR
 option(CHATTERINO_UPDATER "Enable update checks" ON)
 mark_as_advanced(CHATTERINO_UPDATER)
 
+# Kick OAuth credentials (can be set via -DCHATTERINO_KICK_CLIENT_ID=... at build time)
+set(CHATTERINO_KICK_CLIENT_ID "" CACHE STRING "Kick OAuth Client ID")
+set(CHATTERINO_KICK_CLIENT_SECRET "" CACHE STRING "Kick OAuth Client Secret")
+mark_as_advanced(CHATTERINO_KICK_CLIENT_ID)
+mark_as_advanced(CHATTERINO_KICK_CLIENT_SECRET)
+
 if(CHATTERINO_SANITIZER_SUPPORT)
     list(APPEND CMAKE_MODULE_PATH
         "${CMAKE_SOURCE_DIR}/cmake/sanitizers-cmake/cmake"

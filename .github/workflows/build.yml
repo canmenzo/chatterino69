@@ -73,6 +73,9 @@ jobs:
           sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-18 42
 
       - name: Build
+        env:
+          KICK_CLIENT_ID: ${{ secrets.KICK_CLIENT_ID }}
+          KICK_CLIENT_SECRET: ${{ secrets.KICK_CLIENT_SECRET }}
         run: |
           mkdir build
           cd build
@@ -86,6 +89,8 @@ jobs:
             -DCMAKE_PREFIX_PATH="$Qt6_DIR/lib/cmake" \
             -DCHATTERINO_STATIC_QT_BUILD=On \
             -DFORCE_JSON_GENERATION=${{matrix.os == 'ubuntu-24.04' && 'On' || 'Off'}} \
+            -DCHATTERINO_KICK_CLIENT_ID="$KICK_CLIENT_ID" \
+            -DCHATTERINO_KICK_CLIENT_SECRET="$KICK_CLIENT_SECRET" \
             ..
           make -j"$(nproc)"
 
@@ -230,6 +235,9 @@ jobs:
       - name: Build (Windows)
         if: startsWith(matrix.os, 'windows')
         shell: pwsh
+        env:
+          KICK_CLIENT_ID: ${{ secrets.KICK_CLIENT_ID }}
+          KICK_CLIENT_SECRET: ${{ secrets.KICK_CLIENT_SECRET }}
         run: |
           cd build
           cmake `
@@ -240,6 +248,8 @@ jobs:
               -DBUILD_WITH_CRASHPAD="$Env:C2_ENABLE_CRASHPAD" `
               -DCHATTERINO_LTO="$Env:C2_ENABLE_LTO" `
               -DFORCE_JSON_GENERATION=On `
+              -DCHATTERINO_KICK_CLIENT_ID="$Env:KICK_CLIENT_ID" `
+              -DCHATTERINO_KICK_CLIENT_SECRET="$Env:KICK_CLIENT_SECRET" `
               ..
           set cl=/MP
           nmake /S /NOLOGO
@@ -301,6 +311,9 @@ jobs:
 
       - name: Build (MacOS)
         if: startsWith(matrix.os, 'macos')
+        env:
+          KICK_CLIENT_ID: ${{ secrets.KICK_CLIENT_ID }}
+          KICK_CLIENT_SECRET: ${{ secrets.KICK_CLIENT_SECRET }}
         run: |
           mkdir -p build
           cd build
@@ -312,6 +325,8 @@ jobs:
               -DCHATTERINO_NO_AVIF_PLUGIN=On \
               -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
               -DFORCE_JSON_GENERATION=Off \
+              -DCHATTERINO_KICK_CLIENT_ID="$KICK_CLIENT_ID" \
+              -DCHATTERINO_KICK_CLIENT_SECRET="$KICK_CLIENT_SECRET" \
               ..
           make -j"$(sysctl -n hw.logicalcpu)"
         shell: bash

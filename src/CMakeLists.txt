@@ -1381,6 +1381,20 @@ if(NOT CHATTERINO_UPDATER)
     target_compile_definitions(${LIBRARY_PROJECT} PUBLIC CHATTERINO_DISABLE_UPDATER)
 endif()
 
+# Kick OAuth credentials - pass to code if provided
+if(CHATTERINO_KICK_CLIENT_ID)
+    message(STATUS "Kick Client ID configured")
+    target_compile_definitions(${LIBRARY_PROJECT} PRIVATE
+        CHATTERINO_KICK_CLIENT_ID="${CHATTERINO_KICK_CLIENT_ID}"
+    )
+endif()
+if(CHATTERINO_KICK_CLIENT_SECRET)
+    message(STATUS "Kick Client Secret configured")
+    target_compile_definitions(${LIBRARY_PROJECT} PRIVATE
+        CHATTERINO_KICK_CLIENT_SECRET="${CHATTERINO_KICK_CLIENT_SECRET}"
+    )
+endif()
+
 if (DOXYGEN_FOUND)
     message(STATUS "Doxygen found, adding doxygen target")
     # output will be in docs/html
