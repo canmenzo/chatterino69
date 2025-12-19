@@ -291,6 +291,11 @@ QString KickAccountManager::extractUsernameFromResponse(const QJsonDocument &doc
             if (!arr.isEmpty())
             {
                 QJsonObject user = arr[0].toObject();
+                // Official Kick API returns "name" field for username
+                if (user.contains("name"))
+                {
+                    return user["name"].toString();
+                }
                 if (user.contains("username"))
                 {
                     return user["username"].toString();
