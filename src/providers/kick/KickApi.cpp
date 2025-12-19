@@ -168,9 +168,9 @@ void KickApi::sendMessage(int broadcasterUserId, const QString &message,
         return;
     }
 
-    // Official Kick API endpoint (from Context7: /kickengineering/kickdevdocs)
+    // Official Kick API endpoint (from Context7: docs.kick.com/apis/chat)
     // POST https://api.kick.com/public/v1/chat
-    // Body: { "broadcaster_user_id": int, "message": string }
+    // Body: { "content": string, "type": "user"|"bot", "broadcaster_user_id": int }
     QString url = QString("%1/chat").arg(QString::fromLatin1(KICK_API_BASE));
 
     QNetworkRequest request{QUrl{url}};
@@ -180,10 +180,13 @@ void KickApi::sendMessage(int broadcasterUserId, const QString &message,
         "Authorization",
         QString("Bearer %1").arg(this->account_->getAccessToken()).toUtf8());
 
-    // Request body per official API spec
+    // Request body per official API spec (docs.kick.com)
+    // Required fields: content, type
+    // broadcaster_user_id is required when type="user"
     QJsonObject body;
-    body["broadcaster_user_id"] = broadcasterUserId;
-    body["message"] = message;
+    body["content"] = message;                       // Message text (max 500 chars)
+    body["type"] = QString("user");                  // Send as user (not bot)
+    body["broadcaster_user_id"] = broadcasterUserId; // Required for type="user"
     QJsonDocument bodyDoc(body);
 
     QNetworkReply *reply =

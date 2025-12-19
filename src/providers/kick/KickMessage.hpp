@@ -35,6 +35,20 @@ struct KickSender {
     static KickSender fromJson(const QJsonObject &json);
 };
 
+/// Emote position in message content
+struct KickEmotePosition {
+    int start{0};  // Start index in content
+    int end{0};    // End index in content
+};
+
+/// Emote information from Kick message
+struct KickEmote {
+    QString emoteId;
+    std::vector<KickEmotePosition> positions;
+
+    static KickEmote fromJson(const QJsonObject &json);
+};
+
 /// Raw Kick message structure (maps to Pusher WebSocket event payload)
 struct KickMessage {
     QString id;           // Message ID (ULID format)
@@ -43,6 +57,7 @@ struct KickMessage {
     QString type;         // "message", "subscription", "gifted-subscriptions", etc.
     QDateTime createdAt;  // ISO 8601 timestamp
     KickSender sender;
+    std::vector<KickEmote> emotes;  // Emotes with positions
 
     /// Parse a KickMessage from a Pusher event data JSON object
     /// @param json The parsed JSON object from the Pusher "data" field

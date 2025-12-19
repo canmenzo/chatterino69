@@ -11,6 +11,7 @@
 
 namespace chatterino {
 
+class MessageBuilder;
 class KickWebSocket;
 class KickAccount;
 class KickApi;
@@ -77,6 +78,13 @@ private:
 
     /// Add a system message to the channel
     void addSystemMessage(const QString &text);
+
+    /// Parse message content and emotes into message elements
+    /// @param builder The MessageBuilder to add elements to
+    /// @param content The raw message content
+    /// @param emotes The emote list with positions
+    void parseMessageContent(MessageBuilder &builder, const QString &content,
+                             const std::vector<KickEmote> &emotes);
 
     QString channelSlug_;
     int chatroomId_{0};         // Used for WebSocket subscription

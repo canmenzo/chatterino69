@@ -38,6 +38,26 @@ KickSender KickSender::fromJson(const QJsonObject &json)
     return sender;
 }
 
+KickEmote KickEmote::fromJson(const QJsonObject &json)
+{
+    KickEmote emote;
+    emote.emoteId = json["emote_id"].toString();
+
+    // Parse positions array: [{ "s": start, "e": end }, ...]
+    const auto positionsArray = json["positions"].toArray();
+    emote.positions.reserve(positionsArray.size());
+    for (const auto &posVal : positionsArray)
+    {
+        QJsonObject posObj = posVal.toObject();
+        KickEmotePosition pos;
+        pos.start = posObj["s"].toInt();
+        pos.end = posObj["e"].toInt();
+        emote.positions.push_back(pos);
+    }
+
+    return emote;
+}
+
 KickMessage KickMessage::fromJson(const QJsonObject &json)
 {
     KickMessage msg;
@@ -48,6 +68,15 @@ KickMessage KickMessage::fromJson(const QJsonObject &json)
     msg.createdAt = QDateTime::fromString(json["created_at"].toString(),
                                           Qt::ISODateWithMs);
     msg.sender = KickSender::fromJson(json["sender"].toObject());
+
+    // Parse emotes array
+    const auto emotesArray = json["emotes"].toArray();
+    msg.emotes.reserve(emotesArray.size());
+    for (const auto &emoteVal : emotesArray)
+    {
+        msg.emotes.push_back(KickEmote::fromJson(emoteVal.toObject()));
+    }
+
     return msg;
 }
 

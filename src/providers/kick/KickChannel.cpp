@@ -2,6 +2,7 @@
 
 #include "Application.hpp"
 #include "common/QLogging.hpp"
+#include "messages/Emote.hpp"
 #include "messages/Message.hpp"
 #include "messages/MessageBuilder.hpp"
 #include "messages/MessageElement.hpp"
@@ -11,6 +12,8 @@
 #include "singletons/Settings.hpp"
 
 #include <QTimer>
+
+#include <algorithm>
 
 namespace chatterino {
 
@@ -265,11 +268,10 @@ void KickChannel::onMessageReceived(const KickMessage &kickMessage)
                               MessageColor(userColor), FontStyle::ChatMediumBold)
         ->setLink({Link::UserInfo, kickMessage.sender.username});
 
-    // Add message content
-    // TODO: Parse emotes from message content
-    builder.emplace<TextElement>(kickMessage.content,
-                                 MessageElementFlag::Text,
-                                 MessageColor::Text);
+    // Add message content with emote parsing
+    // Kick emotes are in format: [emote:ID:NAME]
+    // Example: "Hello [emote:4148074:HYPERCLAP] world"
+    this->parseMessageContent(builder, kickMessage.content, kickMessage.emotes);
 
     // Store Kick-specific metadata
     builder.message().loginName = kickMessage.sender.slug;
@@ -389,6 +391,110 @@ void KickChannel::addSystemMessage(const QString &text)
 {
     auto msg = makeSystemMessage(text);
     this->addMessage(msg, MessageContext::Original);
+}
+
+void KickChannel::parseMessageContent(MessageBuilder &builder,
+                                      const QString &content,
+                                      const std::vector<KickEmote> &emotes)
+{
+    // Build a flat list of emote ranges sorted by position
+    struct EmoteRange {
+        int start;
+        int end;
+        QString emoteId;
+        QString emoteName;
+    };
+    std::vector<EmoteRange> ranges;
+
+    for (const auto &emote : emotes)
+    {
+        for (const auto &pos : emote.positions)
+        {
+            EmoteRange range;
+            range.start = pos.start;
+            range.end = pos.end;
+            range.emoteId = emote.emoteId;
+
+            // Extract emote name from content (format: [emote:ID:NAME])
+            if (pos.start >= 0 && pos.end <= content.length())
+            {
+                QString emoteText = content.mid(pos.start, pos.end - pos.start);
+                // Parse [emote:ID:NAME] format
+                if (emoteText.startsWith("[emote:") && emoteText.endsWith("]"))
+                {
+                    QStringList parts = emoteText.mid(7, emoteText.length() - 8).split(':');
+                    if (parts.size() >= 2)
+                    {
+                        range.emoteName = parts.last();  // NAME is the last part
+                    }
+                }
+            }
+
+            ranges.push_back(range);
+        }
+    }
+
+    // Sort by start position
+    std::sort(ranges.begin(), ranges.end(),
+              [](const EmoteRange &a, const EmoteRange &b) {
+                  return a.start < b.start;
+              });
+
+    // Build message elements
+    int currentPos = 0;
+    for (const auto &range : ranges)
+    {
+        // Add text before this emote
+        if (range.start > currentPos)
+        {
+            QString textBefore = content.mid(currentPos, range.start - currentPos).trimmed();
+            if (!textBefore.isEmpty())
+            {
+                builder.emplace<TextElement>(textBefore, MessageElementFlag::Text,
+                                             MessageColor::Text);
+            }
+        }
+
+        // Add emote element
+        // Kick emote CDN URL: https://files.kick.com/emotes/{emote_id}/fullsize
+        QString emoteUrl = QString("https://files.kick.com/emotes/%1/fullsize")
+                               .arg(range.emoteId);
+
+        // Create emote with the URL
+        EmoteId emoteId{range.emoteId};
+        EmoteName emoteName{range.emoteName.isEmpty() ? range.emoteId : range.emoteName};
+
+        auto emote = std::make_shared<Emote>(Emote{
+            emoteName,
+            ImageSet{Url{emoteUrl}},
+            Tooltip{emoteName.string},
+            Url{emoteUrl},
+            false,  // Not zero-width
+            emoteId,
+        });
+
+        builder.emplace<EmoteElement>(emote, MessageElementFlag::Emote);
+
+        currentPos = range.end;
+    }
+
+    // Add remaining text after last emote
+    if (currentPos < content.length())
+    {
+        QString remainingText = content.mid(currentPos).trimmed();
+        if (!remainingText.isEmpty())
+        {
+            builder.emplace<TextElement>(remainingText, MessageElementFlag::Text,
+                                         MessageColor::Text);
+        }
+    }
+
+    // If no emotes, just add the whole content as text
+    if (ranges.empty() && !content.isEmpty())
+    {
+        builder.emplace<TextElement>(content, MessageElementFlag::Text,
+                                     MessageColor::Text);
+    }
 }
 
 }  // namespace chatterino

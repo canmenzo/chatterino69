@@ -207,16 +207,18 @@ void KickAccountManager::fetchUserInfoFromApi(const QString &accessToken)
 
     auto *manager = new QNetworkAccessManager();
 
-    // Try POST /users/introspect - the correct endpoint per Kick Dev API docs
-    // This returns user info including username for the authenticated user
-    QUrl introspectUrl{"https://api.kick.com/users/introspect"};
-    QNetworkRequest request{introspectUrl};
+    // Official Kick API endpoint (from docs.kick.com/apis/users):
+    // GET https://api.kick.com/public/v1/users
+    // "If no user IDs are specified, the information for the currently
+    // authorised user will be returned by default."
+    // Response: { "data": [{ "user_id": 12345, "name": "username", ... }] }
+    QUrl usersUrl{"https://api.kick.com/public/v1/users"};
+    QNetworkRequest request{usersUrl};
     request.setRawHeader("Authorization",
                          QString("Bearer %1").arg(accessToken).toUtf8());
-    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setRawHeader("Accept", "application/json");
 
-    QNetworkReply *reply = manager->post(request, QByteArray());
+    QNetworkReply *reply = manager->get(request);
 
     QObject::connect(reply, &QNetworkReply::finished,
                      [this, reply, manager, accessToken]() {
@@ -226,7 +228,7 @@ void KickAccountManager::fetchUserInfoFromApi(const QString &accessToken)
         int statusCode = reply->attribute(
                              QNetworkRequest::HttpStatusCodeAttribute)
                              .toInt();
-        qCDebug(chatterinoKick) << "Users introspect response:" << statusCode
+        qCDebug(chatterinoKick) << "GET /users response:" << statusCode
                                 << responseData;
 
         if (reply->error() == QNetworkReply::NoError && statusCode == 200)
@@ -237,7 +239,7 @@ void KickAccountManager::fetchUserInfoFromApi(const QString &accessToken)
             {
                 manager->deleteLater();
                 qCDebug(chatterinoKick)
-                    << "Got username from /users/introspect:" << username;
+                    << "Got username from GET /users:" << username;
                 this->createAccountWithUsername(username);
                 return;
             }
@@ -245,7 +247,7 @@ void KickAccountManager::fetchUserInfoFromApi(const QString &accessToken)
 
         // Try alternative endpoints as fallback
         qCDebug(chatterinoKick)
-            << "Trying alternative introspect endpoint as fallback...";
+            << "GET /users failed, trying token introspect as fallback...";
         this->fetchUserInfoFromIntrospect(accessToken, manager);
     });
 }
@@ -340,16 +342,16 @@ QString KickAccountManager::extractUsernameFromResponse(const QJsonDocument &doc
 void KickAccountManager::fetchUserInfoFromIntrospect(
     const QString &accessToken, QNetworkAccessManager *manager)
 {
-    // Try token introspection - the access_token goes in the query string
-    QString introspectUrl =
-        QString("https://api.kick.com/public/v1/token/introspect?access_token=%1")
-            .arg(accessToken);
-    QUrl url{introspectUrl};
+    // Official Kick API endpoint (from docs.kick.com/apis/users):
+    // POST https://api.kick.com/public/v1/token/introspect
+    // Token is passed via Authorization header, not query string
+    // Returns: { "data": { "active": true, "client_id": "...", ... } }
+    // Note: This endpoint may not return username, but let's try it
+    QUrl url{"https://api.kick.com/public/v1/token/introspect"};
     QNetworkRequest request{url};
-    request.setHeader(QNetworkRequest::ContentTypeHeader,
-                      "application/x-www-form-urlencoded");
     request.setRawHeader("Authorization",
                          QString("Bearer %1").arg(accessToken).toUtf8());
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
     QNetworkReply *reply = manager->post(request, QByteArray());
 
