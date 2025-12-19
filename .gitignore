@@ -125,3 +125,9 @@ aqtinstall.log
 
 # sccache (CI)
 .sccache
+
+# AI/Spec tooling
+.specify/
+.cursor/
+.claude/
+specs/
