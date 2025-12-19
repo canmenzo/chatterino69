@@ -177,8 +177,8 @@ jobs:
         uses: jurplel/install-qt-action@v4.3.0
         with:
           cache: true
-          cache-key-prefix: ${{ runner.os }}-QtCache-${{ matrix.qt-version }}-v2
-          modules: qtimageformats
+          cache-key-prefix: ${{ runner.os }}-QtCache-${{ matrix.qt-version }}-v3
+          modules: qtimageformats qtwebsockets
           version: ${{ matrix.qt-version }}
 
       # WINDOWS
