@@ -27,6 +27,13 @@ public:
     void getUserByTwitchID(const QString &twitchID,
                            SuccessCallback<const QJsonObject &> &&onSuccess,
                            ErrorCallback &&onError);
+
+    /// Get 7TV user by Kick user ID
+    /// Uses https://7tv.io/v3/users/KICK/{user_id}
+    void getUserByKickID(const QString &kickUserID,
+                         SuccessCallback<const QJsonObject &> &&onSuccess,
+                         ErrorCallback &&onError);
+
     void getEmoteSet(const QString &emoteSet,
                      SuccessCallback<const QJsonObject &> &&onSuccess,
                      ErrorCallback &&onError);

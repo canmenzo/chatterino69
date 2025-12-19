@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common/Aliases.hpp"
 #include "common/Channel.hpp"
 #include "providers/kick/KickMessage.hpp"
 
@@ -11,6 +12,7 @@
 
 namespace chatterino {
 
+class EmoteMap;
 class MessageBuilder;
 class KickWebSocket;
 class KickAccount;
@@ -57,6 +59,12 @@ public:
     // Recent messages (stub - Kick history API not available)
     void fetchRecentMessages();
 
+    /// Refresh 7TV channel emotes (uses Kick-specific 7TV endpoint)
+    void refreshSevenTVChannelEmotes();
+
+    /// Get 7TV emotes for this channel
+    [[nodiscard]] std::shared_ptr<const EmoteMap> getSeventvEmotes() const;
+
     /// Signal emitted when connection state changes
     pajlada::Signals::Signal<KickConnectionState> connectionStateChanged;
 
@@ -95,6 +103,9 @@ private:
     std::unique_ptr<KickWebSocket> webSocket_;
     std::shared_ptr<KickApi> api_;
     std::shared_ptr<KickAccount> account_;
+
+    // 7TV emotes for this Kick channel
+    std::shared_ptr<const EmoteMap> seventvEmotes_;
 
     // Reconnection state
     int reconnectAttempts_{0};

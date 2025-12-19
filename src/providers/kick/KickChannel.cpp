@@ -1,6 +1,7 @@
 #include "providers/kick/KickChannel.hpp"
 
 #include "Application.hpp"
+#include "common/network/NetworkResult.hpp"
 #include "common/QLogging.hpp"
 #include "messages/Emote.hpp"
 #include "messages/Message.hpp"
@@ -9,6 +10,8 @@
 #include "providers/kick/KickAccount.hpp"
 #include "providers/kick/KickApi.hpp"
 #include "providers/kick/KickWebSocket.hpp"
+#include "providers/seventv/SeventvAPI.hpp"
+#include "providers/seventv/SeventvEmotes.hpp"
 #include "singletons/Settings.hpp"
 
 #include <QTimer>
@@ -229,6 +232,59 @@ void KickChannel::fetchRecentMessages()
         "for Kick channels.");
 }
 
+void KickChannel::refreshSevenTVChannelEmotes()
+{
+    if (this->broadcasterUserId_ == 0)
+    {
+        qCDebug(chatterinoKick) << "Cannot load 7TV emotes: broadcaster ID not resolved";
+        return;
+    }
+
+    auto *seventv = getApp()->getSeventvAPI();
+    if (!seventv)
+    {
+        qCWarning(chatterinoKick) << "7TV API not available";
+        return;
+    }
+
+    qCDebug(chatterinoKick) << "Loading 7TV emotes for Kick channel"
+                           << this->channelSlug_ << "user ID:" << this->broadcasterUserId_;
+
+    // Use Kick-specific 7TV endpoint: https://7tv.io/v3/users/KICK/{user_id}
+    seventv->getUserByKickID(
+        QString::number(this->broadcasterUserId_),
+        [this](const QJsonObject &json) {
+            const auto emoteSet = json["emote_set"].toObject();
+            const auto parsedEmotes = emoteSet["emotes"].toArray();
+
+            auto emoteMap = seventv::detail::parseEmotes(
+                parsedEmotes, SeventvEmoteSetKind::Channel);
+
+            if (!emoteMap.empty())
+            {
+                this->seventvEmotes_ = std::make_shared<const EmoteMap>(emoteMap);
+                qCDebug(chatterinoKick)
+                    << "Loaded" << emoteMap.size() << "7TV emotes for Kick channel"
+                    << this->channelSlug_;
+            }
+            else
+            {
+                qCDebug(chatterinoKick)
+                    << "No 7TV emotes found for Kick channel" << this->channelSlug_;
+            }
+        },
+        [this](const auto &result) {
+            qCDebug(chatterinoKick)
+                << "Failed to load 7TV emotes for Kick channel" << this->channelSlug_
+                << ":" << result.formatError();
+        });
+}
+
+std::shared_ptr<const EmoteMap> KickChannel::getSeventvEmotes() const
+{
+    return this->seventvEmotes_;
+}
+
 void KickChannel::onMessageReceived(const KickMessage &kickMessage)
 {
     MessageBuilder builder;
@@ -331,6 +387,9 @@ void KickChannel::resolveAndSubscribe()
                 this->addSystemMessage(
                     QString("Connected to Kick channel: %1")
                         .arg(this->channelSlug_));
+
+                // Load 7TV emotes for this Kick channel
+                this->refreshSevenTVChannelEmotes();
             }
             else
             {
