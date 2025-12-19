@@ -18,6 +18,7 @@ namespace chatterino {
 class KickWebSocket : public QObject
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(KickWebSocket)
 
 public:
     explicit KickWebSocket(QObject *parent = nullptr);
@@ -50,7 +51,7 @@ public:
     /// Signal emitted on error
     pajlada::Signals::Signal<QString> errorOccurred;
 
-private slots:
+private Q_SLOTS:
     void onConnected();
     void onDisconnected();
     void onTextMessageReceived(const QString &message);

@@ -1,18 +1,21 @@
 #pragma once
 
 #include "common/SignalVector.hpp"
+#include "providers/kick/KickOAuthFlow.hpp"
 
 #include <boost/signals2.hpp>
 #include <pajlada/signals/signal.hpp>
+#include <QJsonDocument>
 #include <QString>
 
 #include <memory>
 #include <mutex>
 
+class QNetworkAccessManager;
+
 namespace chatterino {
 
 class KickAccount;
-class KickOAuthFlow;
 
 /// Manages Kick.tv user accounts
 /// Similar to TwitchAccountManager but for Kick platform
@@ -59,9 +62,39 @@ private:
     std::unique_ptr<KickOAuthFlow> oauthFlow_;
     mutable std::mutex mutex_;
 
+    /// Temporary storage for tokens while fetching user info
+    KickOAuthFlow::Tokens pendingTokens_;
+
     void setCurrentUser(std::shared_ptr<KickAccount> account);
     void onOAuthSuccess(const KickOAuthFlow::Tokens &tokens);
     void onOAuthFailed(const QString &error);
+
+    /// Extract username from JWT token payload
+    QString extractUsernameFromToken(const QString &accessToken);
+
+    /// Extract username from JSON response (handles various formats)
+    QString extractUsernameFromResponse(const QJsonDocument &doc);
+
+    /// Fetch user info from Kick API
+    void fetchUserInfoFromApi(const QString &accessToken);
+
+    /// Fetch user info from token introspect endpoint
+    void fetchUserInfoFromIntrospect(const QString &accessToken,
+                                     QNetworkAccessManager *manager);
+
+    /// Try /api/v1/user endpoint
+    void fetchCurrentUser(const QString &accessToken,
+                          QNetworkAccessManager *manager);
+
+    /// Try v2 user endpoint
+    void fetchUserV2(const QString &accessToken,
+                     QNetworkAccessManager *manager);
+
+    /// Prompt user to enter their username manually
+    void promptForUsername();
+
+    /// Create account after getting username
+    void createAccountWithUsername(const QString &username);
 
     friend class AccountController;
 };

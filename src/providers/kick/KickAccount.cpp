@@ -93,7 +93,7 @@ bool KickAccount::refreshAccessToken()
     QNetworkReply *reply =
         manager->post(request, postData.toString(QUrl::FullyEncoded).toUtf8());
 
-    QObject::connect(reply, &QNetworkReply::finished, this,
+    QObject::connect(reply, &QNetworkReply::finished,
                      [this, reply, manager] {
         reply->deleteLater();
         manager->deleteLater();

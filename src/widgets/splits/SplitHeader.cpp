@@ -533,7 +533,7 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
 
             dialog->setOnMerge([this](ChannelPtr source, ChannelPtr target) {
                 // Create merged channel
-                QList<ChannelPtr> sources = {source, target};
+                std::vector<ChannelPtr> sources = {source, target};
                 auto mergedChannel = std::make_shared<MergedChannel>(
                     QString("%1 + %2").arg(source->getName(), target->getName()),
                     sources);

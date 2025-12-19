@@ -39,7 +39,7 @@ public:
     // Kick-specific methods
     void connect();
     void disconnect();
-    void reconnect();
+    void reconnect() override;
     [[nodiscard]] KickConnectionState getConnectionState() const;
     [[nodiscard]] QString getChannelSlug() const;
     [[nodiscard]] int getChatroomId() const;

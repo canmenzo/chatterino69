@@ -114,6 +114,9 @@ enum class MessageElementFlag : int64_t {
     // - FFZ donator badge
     BadgeFfz = (1LL << 19),
 
+    // Platform indicator badge (Twitch/Kick) for merged channels
+    BadgePlatform = (1LL << 28),
+
     Badges = BadgeGlobalAuthority | BadgePredictions | BadgeChannelAuthority |
              BadgeSubscription | BadgeVanity | BadgeChatterino | BadgeSevenTV |
              BadgeFfz | BadgeSharedChannel | BadgeBttv | BadgePlatform,
@@ -136,9 +139,6 @@ enum class MessageElementFlag : int64_t {
 
     // A mention of a username that isn't the author of the message
     Mention = (1LL << 27),
-
-    // Platform indicator badge (Twitch/Kick) for merged channels
-    BadgePlatform = (1LL << 28),
 
     // used to check if links should be lowercased
     LowercaseLinks = (1LL << 29),

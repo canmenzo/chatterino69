@@ -127,28 +127,30 @@ void KickChannel::connect()
         this->webSocket_ = std::make_unique<KickWebSocket>();
 
         // Connect signals
-        this->webSocket_->messageReceived.connect(
+        std::ignore = this->webSocket_->messageReceived.connect(
             [this](const KickMessage &msg) {
                 this->onMessageReceived(msg);
             });
 
-        this->webSocket_->connectionStateChanged.connect([this](bool connected) {
-            if (connected)
-            {
-                // Connection established, now resolve channel and subscribe
-                this->resolveAndSubscribe();
-            }
-            else
-            {
-                this->setConnectionState(KickConnectionState::Disconnected);
-                this->addSystemMessage("Disconnected from Kick chat");
-            }
-        });
+        std::ignore = this->webSocket_->connectionStateChanged.connect(
+            [this](bool connected) {
+                if (connected)
+                {
+                    // Connection established, now resolve channel and subscribe
+                    this->resolveAndSubscribe();
+                }
+                else
+                {
+                    this->setConnectionState(KickConnectionState::Disconnected);
+                    this->addSystemMessage("Disconnected from Kick chat");
+                }
+            });
 
-        this->webSocket_->errorOccurred.connect([this](const QString &error) {
-            this->addSystemMessage(QString("Kick error: %1").arg(error));
-            this->handleConnectionError();
-        });
+        std::ignore = this->webSocket_->errorOccurred.connect(
+            [this](const QString &error) {
+                this->addSystemMessage(QString("Kick error: %1").arg(error));
+                this->handleConnectionError();
+            });
     }
 
     // Connect to WebSocket
@@ -179,7 +181,7 @@ void KickChannel::reconnect()
     // Reset reconnection attempts on manual reconnect
     this->reconnectAttempts_ = 0;
 
-    QTimer::singleShot(1000, this, [this] {
+    QTimer::singleShot(1000, [this] {
         this->connect();
     });
 }
@@ -288,33 +290,53 @@ void KickChannel::setConnectionState(KickConnectionState state)
 
 void KickChannel::resolveAndSubscribe()
 {
-    // TODO: Use KickApi to resolve channel slug to chatroom ID
-    // For now, use a placeholder that will be replaced with API call
-    // This is a temporary workaround
-
-    // For testing, we'll assume the channel slug can be used as a numeric ID
-    // In production, this should call KickApi::resolveChannelId()
-
     // Emit connecting message
     this->addSystemMessage(
         QString("Connecting to Kick channel: %1...").arg(this->channelSlug_));
 
-    // TODO: Replace with actual API call
-    // For now, we'll simulate the connection
-    // The actual implementation will use KickApi::resolveChannelId()
-    QTimer::singleShot(100, this, [this] {
-        // Placeholder: In real implementation, this would be set by API response
-        // For development/testing, we use a mock ID
-        this->chatroomId_ = 1;  // Placeholder
+    // Create API instance if needed (for channel resolution)
+    if (!this->api_)
+    {
+        this->api_ = std::make_shared<KickApi>();
+    }
 
-        if (this->webSocket_ && this->webSocket_->isConnected())
-        {
-            this->webSocket_->subscribe(this->chatroomId_);
-            this->setConnectionState(KickConnectionState::Connected);
-            this->addSystemMessage(
-                QString("Connected to Kick channel: %1").arg(this->channelSlug_));
-        }
-    });
+    // Use KickApi to resolve channel slug to chatroom ID
+    this->api_->resolveChannelInfo(
+        this->channelSlug_,
+        [this](KickApi::ChannelInfo info) {
+            if (!info.success)
+            {
+                this->setConnectionState(KickConnectionState::Failed);
+                this->addSystemMessage(
+                    QString("Failed to resolve Kick channel: %1. The channel "
+                            "may not exist or is unavailable.")
+                        .arg(this->channelSlug_));
+                return;
+            }
+
+            this->chatroomId_ = info.chatroomId;
+            this->broadcasterUserId_ = info.broadcasterUserId;
+
+            qCDebug(chatterinoKick)
+                << "Channel" << this->channelSlug_ << "resolved:"
+                << "chatroomId=" << this->chatroomId_
+                << "broadcasterUserId=" << this->broadcasterUserId_;
+
+            if (this->webSocket_ && this->webSocket_->isConnected())
+            {
+                this->webSocket_->subscribe(this->chatroomId_);
+                this->setConnectionState(KickConnectionState::Connected);
+                this->addSystemMessage(
+                    QString("Connected to Kick channel: %1")
+                        .arg(this->channelSlug_));
+            }
+            else
+            {
+                this->setConnectionState(KickConnectionState::Failed);
+                this->addSystemMessage(
+                    "WebSocket disconnected during channel resolution");
+            }
+        });
 }
 
 void KickChannel::handleConnectionError()
@@ -354,7 +376,7 @@ void KickChannel::scheduleReconnect()
             .arg(this->reconnectAttempts_)
             .arg(MAX_RECONNECT_ATTEMPTS));
 
-    QTimer::singleShot(delayMs, this, [this] {
+    QTimer::singleShot(delayMs, [this] {
         if (this->connectionState_ == KickConnectionState::Reconnecting)
         {
             this->disconnect();

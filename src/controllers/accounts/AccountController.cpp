@@ -43,11 +43,20 @@ AccountController::AccountController()
         this->kick.accounts.itemRemoved.connect([this](const auto &args) {
             if (args.caller != this)
             {
-                const auto &accs = this->kick.accounts.raw();
-                auto it = std::find(accs.begin(), accs.end(), args.item);
-                assert(it != accs.end());
-
-                this->accounts_.removeAt(it - accs.begin(), this);
+                // Find and remove from our accounts_ list
+                // Note: The item has already been removed from kick.accounts
+                // so we search in accounts_ instead
+                auto accountPtr =
+                    std::dynamic_pointer_cast<Account>(args.item);
+                if (accountPtr)
+                {
+                    const auto &accs = this->accounts_.raw();
+                    auto it = std::find(accs.begin(), accs.end(), accountPtr);
+                    if (it != accs.end())
+                    {
+                        this->accounts_.removeAt(it - accs.begin(), this);
+                    }
+                }
             }
         });
 
@@ -68,10 +77,16 @@ AccountController::AccountController()
             case ProviderId::Kick: {
                 if (args.caller != this)
                 {
+                    // Find by raw pointer comparison since types differ
                     auto &&accs = this->kick.accounts;
-                    auto it = std::find(accs.begin(), accs.end(), args.item);
-                    assert(it != accs.end());
-                    this->kick.accounts.removeAt(it - accs.begin(), this);
+                    for (size_t i = 0; i < accs.raw().size(); i++)
+                    {
+                        if (accs.raw()[i].get() == args.item.get())
+                        {
+                            this->kick.accounts.removeAt(i, this);
+                            break;
+                        }
+                    }
                 }
             }
             break;

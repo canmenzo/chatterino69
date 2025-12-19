@@ -3,6 +3,7 @@
 #include "Application.hpp"
 #include "common/Literals.hpp"  // IWYU pragma: keep
 #include "common/Version.hpp"
+#include "controllers/accounts/AccountController.hpp"
 #include "controllers/hotkeys/HotkeyCategory.hpp"
 #include "controllers/hotkeys/HotkeyController.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
@@ -963,6 +964,10 @@ void GeneralPage::initLayout(GeneralPageView &layout)
 
         auto *kickLoginButton = new QPushButton("Login with Kick");
         kickLoginButton->setEnabled(s.enableKickIntegration);
+        kickLoginButton->setToolTip(
+            "Note: Kick OAuth requires a registered developer application.\n"
+            "Set CHATTERINO_KICK_CLIENT_ID environment variable with your\n"
+            "app's client ID. Without this, login will fail.");
         kickAccountLayout->addWidget(kickLoginButton);
 
         auto *kickLogoutButton = new QPushButton("Logout");

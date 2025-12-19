@@ -3,6 +3,8 @@
 #include "common/QLogging.hpp"
 #include "providers/kick/KickAccount.hpp"
 
+#include <pajlada/signals/scoped-connection.hpp>
+
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkAccessManager>
@@ -29,16 +31,19 @@ std::shared_ptr<KickAccount> KickApi::getAccount() const
     return this->account_;
 }
 
-void KickApi::resolveBroadcasterId(
+void KickApi::resolveChannelInfo(
     const QString &channelSlug,
-    std::function<void(int broadcasterUserId, bool success)> callback)
+    std::function<void(ChannelInfo info)> callback)
 {
     // Use the channel API to get broadcaster info
     // Note: This uses unofficial endpoint as official API doesn't expose this
     QString url = QString("%1/channels/%2")
                       .arg(QString::fromLatin1(KICK_CHANNEL_API), channelSlug);
 
-    QNetworkRequest request(QUrl(url));
+    qCDebug(chatterinoKick) << "Resolving channel info for:" << channelSlug
+                            << "URL:" << url;
+
+    QNetworkRequest request{QUrl{url}};
     request.setHeader(QNetworkRequest::UserAgentHeader, "Chatterino7");
     request.setRawHeader("Accept", "application/json");
 
@@ -48,12 +53,15 @@ void KickApi::resolveBroadcasterId(
                      [this, reply, callback, channelSlug] {
         reply->deleteLater();
 
+        ChannelInfo info;
+        info.slug = channelSlug;
+
         if (reply->error() != QNetworkReply::NoError)
         {
             qCWarning(chatterinoKick)
-                << "Failed to resolve broadcaster ID for" << channelSlug
+                << "Failed to resolve channel info for" << channelSlug
                 << ":" << reply->errorString();
-            callback(0, false);
+            callback(info);
             return;
         }
 
@@ -63,37 +71,63 @@ void KickApi::resolveBroadcasterId(
         if (!doc.isObject())
         {
             qCWarning(chatterinoKick) << "Invalid channel response";
-            callback(0, false);
+            callback(info);
             return;
         }
 
         QJsonObject obj = doc.object();
 
         // Extract broadcaster user_id from response
-        // The structure includes: { "user_id": 12345, "chatroom": {...} }
+        // The structure includes: { "user_id": 12345, "chatroom": { "id": 67890 } }
         if (obj.contains("user_id"))
         {
-            int broadcasterUserId = obj["user_id"].toInt();
-            qCDebug(chatterinoKick)
-                << "Resolved channel" << channelSlug << "to broadcaster ID"
-                << broadcasterUserId;
-            callback(broadcasterUserId, true);
+            info.broadcasterUserId = obj["user_id"].toInt();
         }
         else if (obj.contains("user") && obj["user"].isObject())
         {
             // Alternative structure: { "user": { "id": 12345 } }
-            int broadcasterUserId = obj["user"].toObject()["id"].toInt();
+            info.broadcasterUserId = obj["user"].toObject()["id"].toInt();
+        }
+
+        // Extract chatroom ID
+        if (obj.contains("chatroom") && obj["chatroom"].isObject())
+        {
+            QJsonObject chatroom = obj["chatroom"].toObject();
+            info.chatroomId = chatroom["id"].toInt();
+        }
+        else if (obj.contains("id"))
+        {
+            // Sometimes the channel ID is used as chatroom ID
+            info.chatroomId = obj["id"].toInt();
+        }
+
+        if (info.broadcasterUserId > 0 && info.chatroomId > 0)
+        {
+            info.success = true;
             qCDebug(chatterinoKick)
-                << "Resolved channel" << channelSlug << "to broadcaster ID"
-                << broadcasterUserId;
-            callback(broadcasterUserId, true);
+                << "Resolved channel" << channelSlug
+                << "- broadcaster ID:" << info.broadcasterUserId
+                << "- chatroom ID:" << info.chatroomId;
         }
         else
         {
             qCWarning(chatterinoKick)
-                << "No user ID in channel response for" << channelSlug;
-            callback(0, false);
+                << "Incomplete channel info for" << channelSlug
+                << "- broadcaster ID:" << info.broadcasterUserId
+                << "- chatroom ID:" << info.chatroomId;
         }
+
+        callback(info);
+    });
+}
+
+void KickApi::resolveBroadcasterId(
+    const QString &channelSlug,
+    std::function<void(int broadcasterUserId, bool success)> callback)
+{
+    // Delegate to resolveChannelInfo for backward compatibility
+    this->resolveChannelInfo(channelSlug, [callback](ChannelInfo info) {
+        callback(info.broadcasterUserId, info.success);
     });
 }
 
@@ -139,7 +173,7 @@ void KickApi::sendMessage(int broadcasterUserId, const QString &message,
     // Body: { "broadcaster_user_id": int, "message": string }
     QString url = QString("%1/chat").arg(QString::fromLatin1(KICK_API_BASE));
 
-    QNetworkRequest request(QUrl(url));
+    QNetworkRequest request{QUrl{url}};
     request.setHeader(QNetworkRequest::UserAgentHeader, "Chatterino7");
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setRawHeader(
@@ -289,6 +323,7 @@ void KickApi::refreshAndRetry(std::function<void()> retryFn)
     qCDebug(chatterinoKick) << "Token expired, attempting refresh...";
 
     // Connect to token refresh result
+    // Use shared_ptr to ensure the connection outlives the callback scope
     auto connection = std::make_shared<pajlada::Signals::ScopedConnection>();
     *connection = this->account_->tokenRefreshed.connect([retryFn, connection](bool success) {
         if (success)
@@ -300,8 +335,8 @@ void KickApi::refreshAndRetry(std::function<void()> retryFn)
         {
             qCWarning(chatterinoKick) << "Token refresh failed";
         }
-        // Disconnect after handling
-        connection->reset();
+        // Disconnect after handling by assigning an empty connection
+        *connection = pajlada::Signals::ScopedConnection{};
     });
 
     this->account_->refreshAccessToken();

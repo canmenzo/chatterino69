@@ -3,6 +3,7 @@
 #include "Application.hpp"
 #include "providers/kick/KickChannel.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
+#include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/WindowManager.hpp"
 

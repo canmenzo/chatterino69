@@ -288,7 +288,7 @@ IndirectChannel SelectChannelDialog::getSelectedChannel() const
             if (!getSettings()->enableKickIntegration)
             {
                 // T100: Show prompt to enable Kick integration
-                QMessageBox msgBox(this);
+                QMessageBox msgBox;
                 msgBox.setWindowTitle("Kick Integration Disabled");
                 msgBox.setText(
                     "Kick integration is currently disabled. Would you like to "
@@ -301,8 +301,8 @@ IndirectChannel SelectChannelDialog::getSelectedChannel() const
 
                 if (msgBox.clickedButton() == enableBtn)
                 {
-                    // Open settings dialog
-                    SettingsDialog::showDialog(this, SettingsDialogPreference::General);
+                    // Open settings dialog to configure Kick
+                    SettingsDialog::showDialog(nullptr, SettingsDialogPreference::NoPreference);
                 }
                 return Channel::getEmpty();
             }
@@ -314,7 +314,7 @@ IndirectChannel SelectChannelDialog::getSelectedChannel() const
             // Create and return KickChannel
             auto kickChannel = std::make_shared<KickChannel>(kickSlug);
             kickChannel->connect();
-            return kickChannel;
+            return ChannelPtr(kickChannel);
         }
 
         // Default to Twitch channel

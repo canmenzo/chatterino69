@@ -36,6 +36,7 @@ struct KickApiResult {
 class KickApi : public QObject
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(KickApi)
 
 public:
     explicit KickApi(QObject *parent = nullptr);
@@ -47,7 +48,21 @@ public:
     /// Get the current account
     [[nodiscard]] std::shared_ptr<KickAccount> getAccount() const;
 
-    /// Resolve a channel slug to its broadcaster user ID
+    /// Channel info resolved from Kick API
+    struct ChannelInfo {
+        int broadcasterUserId{0};
+        int chatroomId{0};
+        QString slug;
+        bool success{false};
+    };
+
+    /// Resolve a channel slug to its broadcaster user ID and chatroom ID
+    /// @param channelSlug The channel username/slug
+    /// @param callback Called with channel info
+    void resolveChannelInfo(const QString &channelSlug,
+                            std::function<void(ChannelInfo info)> callback);
+
+    /// Resolve a channel slug to its broadcaster user ID (legacy, for compatibility)
     /// @param channelSlug The channel username/slug
     /// @param callback Called with (broadcasterUserId, success)
     void resolveBroadcasterId(const QString &channelSlug,

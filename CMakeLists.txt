@@ -146,6 +146,7 @@ find_package(Qt${MAJOR_QT_VERSION} REQUIRED
     Network
     Svg
     Concurrent
+    WebSockets
 )
 
 find_package(Qt${MAJOR_QT_VERSION} COMPONENTS WidgetsPrivate)

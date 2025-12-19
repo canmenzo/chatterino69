@@ -38,7 +38,7 @@ public:
 
     // Merged channel specific
     /// Get the display name showing all sources (e.g., "T:xqc + K:xqc")
-    [[nodiscard]] QString getDisplayName() const;
+    [[nodiscard]] const QString &getDisplayName() const override;
 
     /// Get all source channels
     [[nodiscard]] const std::vector<ChannelPtr> &getSourceChannels() const;
@@ -84,8 +84,12 @@ private:
 
     std::vector<ChannelPtr> sourceChannels_;
     PlatformSelection platformSelection_{PlatformSelection::Both};
+    mutable QString cachedDisplayName_;
 
     pajlada::Signals::SignalHolder signalHolder_;
+
+    /// Update the cached display name
+    void updateCachedDisplayName() const;
 };
 
 }  // namespace chatterino

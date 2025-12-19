@@ -4,6 +4,7 @@
 
 #include <QCryptographicHash>
 #include <QDesktopServices>
+#include <QTimer>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkAccessManager>
@@ -112,8 +113,21 @@ QString KickOAuthFlow::buildAuthorizationUrl() const
     QUrl url(KICK_AUTH_URL);
     QUrlQuery query;
 
+    // Check for custom client ID from environment variable
+    // Users with registered Kick apps can set CHATTERINO_KICK_CLIENT_ID
+    QString clientId = qEnvironmentVariable("CHATTERINO_KICK_CLIENT_ID", "");
+    if (clientId.isEmpty())
+    {
+        // Fallback to placeholder - will likely fail without a registered app
+        clientId = "chatterino7";
+        qCWarning(chatterinoKick)
+            << "No CHATTERINO_KICK_CLIENT_ID set. Kick OAuth requires a "
+               "registered application. Set CHATTERINO_KICK_CLIENT_ID "
+               "environment variable with your app's client ID.";
+    }
+
     query.addQueryItem("response_type", "code");
-    query.addQueryItem("client_id", "chatterino7");  // Placeholder - needs real client ID
+    query.addQueryItem("client_id", clientId);
     query.addQueryItem("redirect_uri", REDIRECT_URI);
     query.addQueryItem("scope", "chat:write user:read");
     query.addQueryItem("state", this->state_);
@@ -187,9 +201,22 @@ void KickOAuthFlow::onClientReadyRead()
 
     if (!code.has_value())
     {
+        // Check if this was just a favicon or non-callback request
+        QString requestStr = QString::fromUtf8(request);
+        if (!requestStr.contains("/callback?"))
+        {
+            // Silently ignore non-callback requests (favicon, etc.)
+            socket->disconnectFromHost();
+            return;
+        }
+
         this->sendResponse(socket, 400, "Invalid callback request");
-        this->authenticationFailed.invoke("Invalid OAuth callback");
-        this->cancel();
+
+        // Defer cancel to avoid crash (don't delete server while in callback)
+        QTimer::singleShot(0, this, [this] {
+            this->authenticationFailed.invoke("Invalid OAuth callback");
+            this->cancel();
+        });
         return;
     }
 
@@ -221,14 +248,28 @@ std::optional<QString> KickOAuthFlow::parseCallbackCode(
         return std::nullopt;
     }
 
-    QUrl url(parts[1], QUrl::StrictMode);
+    QString path = parts[1];
+
+    // Ignore favicon.ico and other non-callback requests
+    if (!path.startsWith("/callback?"))
+    {
+        qCDebug(chatterinoKick) << "Ignoring non-callback request:" << path;
+        return std::nullopt;
+    }
+
+    QUrl url("http://localhost" + path);
     QUrlQuery query(url.query());
 
-    // Verify state to prevent CSRF
-    QString state = query.queryItemValue("state");
+    // Verify state to prevent CSRF (URL-decode both sides for comparison)
+    QString state = query.queryItemValue("state", QUrl::FullyDecoded);
+    qCDebug(chatterinoKick) << "Received state:" << state;
+    qCDebug(chatterinoKick) << "Expected state:" << this->state_;
+
     if (state != this->state_)
     {
-        qCWarning(chatterinoKick) << "State mismatch in OAuth callback";
+        qCWarning(chatterinoKick) << "State mismatch in OAuth callback"
+                                  << "received:" << state
+                                  << "expected:" << this->state_;
         return std::nullopt;
     }
 
@@ -315,6 +356,20 @@ void KickOAuthFlow::exchangeCodeForTokens(const QString &code)
 {
     qCDebug(chatterinoKick) << "Exchanging authorization code for tokens...";
 
+    // Get client credentials from environment variables
+    QString clientId = qEnvironmentVariable("CHATTERINO_KICK_CLIENT_ID", "");
+    QString clientSecret = qEnvironmentVariable("CHATTERINO_KICK_CLIENT_SECRET", "");
+
+    if (clientId.isEmpty())
+    {
+        qCWarning(chatterinoKick)
+            << "CHATTERINO_KICK_CLIENT_ID not set. Token exchange will fail.";
+        this->authenticationFailed.invoke(
+            "Missing CHATTERINO_KICK_CLIENT_ID environment variable");
+        this->cancel();
+        return;
+    }
+
     QNetworkAccessManager *manager = new QNetworkAccessManager(this);
 
     QUrl tokenUrl(KICK_TOKEN_URL);
@@ -324,7 +379,11 @@ void KickOAuthFlow::exchangeCodeForTokens(const QString &code)
 
     QUrlQuery postData;
     postData.addQueryItem("grant_type", "authorization_code");
-    postData.addQueryItem("client_id", "chatterino7");  // Placeholder
+    postData.addQueryItem("client_id", clientId);
+    if (!clientSecret.isEmpty())
+    {
+        postData.addQueryItem("client_secret", clientSecret);
+    }
     postData.addQueryItem("code", code);
     postData.addQueryItem("redirect_uri", REDIRECT_URI);
     postData.addQueryItem("code_verifier", this->codeVerifier_);

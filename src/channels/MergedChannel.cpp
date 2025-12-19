@@ -2,7 +2,7 @@
 
 #include "common/QLogging.hpp"
 #include "messages/Message.hpp"
-#include "messages/MessageElement.hpp"
+#include "messages/MessageBuilder.hpp"
 #include "messages/MessageFlag.hpp"
 
 #include <algorithm>
@@ -161,7 +161,13 @@ bool MergedChannel::canSendMessage() const
     return false;
 }
 
-QString MergedChannel::getDisplayName() const
+const QString &MergedChannel::getDisplayName() const
+{
+    this->updateCachedDisplayName();
+    return this->cachedDisplayName_;
+}
+
+void MergedChannel::updateCachedDisplayName() const
 {
     QStringList parts;
     for (const auto &channel : this->sourceChannels_)
@@ -169,7 +175,7 @@ QString MergedChannel::getDisplayName() const
         QString prefix = getPlatformPrefix(channel->getType());
         parts.append(QString("%1:%2").arg(prefix, channel->getName()));
     }
-    return parts.join(" + ");
+    this->cachedDisplayName_ = parts.join(" + ");
 }
 
 const std::vector<ChannelPtr> &MergedChannel::getSourceChannels() const
@@ -265,39 +271,20 @@ void MergedChannel::subscribeToChannel(const ChannelPtr &channel)
 void MergedChannel::onSourceMessageReceived(MessagePtr message,
                                             Channel::Type sourceType)
 {
-    // Create a copy of the message with platform flag set
-    auto msgCopy = std::make_shared<Message>(*message);
-
-    // Set platform flag for UI display
+    // Set platform flag for UI display (flags is mutable so we can modify const messages)
+    // The renderer will use this flag to display platform indicators
     if (sourceType == Channel::Type::Twitch)
     {
-        msgCopy->flags.set(MessageFlag::Twitch);
+        message->flags.set(MessageFlag::Twitch);
     }
     else if (sourceType == Channel::Type::Kick)
     {
-        msgCopy->flags.set(MessageFlag::Kick);
+        message->flags.set(MessageFlag::Kick);
     }
-
-    // Add platform badge element at the beginning of the message
-    // This creates a text indicator like [T] or [K] before the username
-    QString platformPrefix = getPlatformPrefix(sourceType);
-    auto platformBadge = std::make_unique<TextElement>(
-        QString("[%1]").arg(platformPrefix), MessageElementFlag::BadgePlatform,
-        MessageColor(sourceType == Channel::Type::Twitch
-                         ? QColor(145, 70, 255)  // Twitch purple
-                         : QColor(83, 252, 24)), // Kick green
-        FontStyle::ChatMediumBold);
-    platformBadge->setTooltip(sourceType == Channel::Type::Twitch
-                                  ? "Message from Twitch"
-                                  : "Message from Kick");
-
-    // Insert platform badge at the front of elements
-    msgCopy->elements.insert(msgCopy->elements.begin(),
-                             std::move(platformBadge));
 
     // Add message chronologically based on serverReceivedTime
     // The Channel::addMessage handles chronological insertion
-    this->addMessage(msgCopy, MessageContext::Original);
+    this->addMessage(message, MessageContext::Original);
 }
 
 QString MergedChannel::getPlatformPrefix(Channel::Type type)

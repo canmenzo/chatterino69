@@ -16,6 +16,7 @@ namespace chatterino {
 class KickOAuthFlow : public QObject
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(KickOAuthFlow)
 
 public:
     explicit KickOAuthFlow(QObject *parent = nullptr);
@@ -56,7 +57,7 @@ public:
     static constexpr const char *REDIRECT_URI = "http://localhost:52847/callback";
     static constexpr int LOCAL_SERVER_PORT = 52847;
 
-private slots:
+private Q_SLOTS:
     void onNewConnection();
     void onClientReadyRead();
 
