@@ -3,6 +3,7 @@
 #include "widgets/BaseWindow.hpp"
 
 #include <pajlada/signals/signal.hpp>
+#include <QComboBox>
 #include <QFocusEvent>
 #include <QLabel>
 #include <QLineEdit>
@@ -66,6 +67,7 @@ private:
     struct {
         detail::AutoCheckedRadioButton *channel;
         QLabel *channelLabel;
+        QComboBox *platformSelector;  // Platform selection (Twitch/Kick)
         QLineEdit *channelName;
 
         detail::AutoCheckedRadioButton *whispers;
@@ -83,6 +85,9 @@ private:
         detail::AutoCheckedRadioButton *automod;
         QLabel *automodLabel;
     } ui_{};
+
+    /// Update UI based on Kick integration setting
+    void updateKickIntegrationUI();
 
     EventFilter tabFilter_;
 

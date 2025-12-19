@@ -1,6 +1,7 @@
 #include "widgets/splits/SplitInput.hpp"
 
 #include "Application.hpp"
+#include "channels/MergedChannel.hpp"
 #include "common/enums/MessageOverflow.hpp"
 #include "common/QLogging.hpp"
 #include "controllers/commands/CommandController.hpp"
@@ -76,6 +77,23 @@ SplitInput::SplitInput(QWidget *parent, Split *_chatWidget,
         auto channel = this->split_->getChannel();
         auto *completer = new QCompleter(channel->completionModel);
         this->ui_.textEdit->setCompleter(completer);
+
+        // T072-T077: Show/hide platform selector for merged channels
+        bool isMerged = (channel->getType() == Channel::Type::Merged);
+        this->ui_.platformWrapper->setVisible(isMerged);
+
+        if (isMerged)
+        {
+            // Reset to "Both" selection when switching to merged channel
+            this->ui_.platformBothBtn->setChecked(true);
+            this->ui_.platformTwitchBtn->setChecked(false);
+            this->ui_.platformKickBtn->setChecked(false);
+
+            if (auto *merged = dynamic_cast<MergedChannel *>(channel.get()))
+            {
+                merged->setPlatformSelection(PlatformSelection::Both);
+            }
+        }
     });
 
     // misc
@@ -147,6 +165,84 @@ void SplitInput::initLayout()
 
     replyCancelButton->hide();
     replyLabel->hide();
+
+    // T072-T077: Platform selection for merged channels
+    auto platformWrapper =
+        layout.emplace<QWidget>().assign(&this->ui_.platformWrapper);
+    platformWrapper->setContentsMargins(4, 2, 4, 2);
+
+    auto platformHbox =
+        platformWrapper.setLayoutType<QHBoxLayout>().withoutMargin().assign(
+            &this->ui_.platformHbox);
+    platformHbox->setSpacing(4);
+
+    this->ui_.platformStatusLabel = new QLabel("Send to:");
+    this->ui_.platformStatusLabel->setStyleSheet("color: #888; font-size: 11px;");
+    platformHbox->addWidget(this->ui_.platformStatusLabel);
+
+    this->ui_.platformBothBtn = new QPushButton("Both");
+    this->ui_.platformBothBtn->setCheckable(true);
+    this->ui_.platformBothBtn->setChecked(true);
+    this->ui_.platformBothBtn->setFixedHeight(22);
+    this->ui_.platformBothBtn->setStyleSheet(
+        "QPushButton { background: #444; border: 1px solid #666; border-radius: 3px; padding: 2px 8px; }"
+        "QPushButton:checked { background: #53fc18; color: #000; }"
+        "QPushButton:hover { background: #555; }");
+    platformHbox->addWidget(this->ui_.platformBothBtn);
+
+    this->ui_.platformTwitchBtn = new QPushButton("Twitch");
+    this->ui_.platformTwitchBtn->setCheckable(true);
+    this->ui_.platformTwitchBtn->setFixedHeight(22);
+    this->ui_.platformTwitchBtn->setStyleSheet(
+        "QPushButton { background: #444; border: 1px solid #666; border-radius: 3px; padding: 2px 8px; }"
+        "QPushButton:checked { background: #9146ff; color: #fff; }"
+        "QPushButton:hover { background: #555; }");
+    platformHbox->addWidget(this->ui_.platformTwitchBtn);
+
+    this->ui_.platformKickBtn = new QPushButton("Kick");
+    this->ui_.platformKickBtn->setCheckable(true);
+    this->ui_.platformKickBtn->setFixedHeight(22);
+    this->ui_.platformKickBtn->setStyleSheet(
+        "QPushButton { background: #444; border: 1px solid #666; border-radius: 3px; padding: 2px 8px; }"
+        "QPushButton:checked { background: #53fc18; color: #000; }"
+        "QPushButton:hover { background: #555; }");
+    platformHbox->addWidget(this->ui_.platformKickBtn);
+
+    platformHbox->addStretch();
+
+    // Connect platform buttons to update MergedChannel selection
+    QObject::connect(this->ui_.platformBothBtn, &QPushButton::clicked, [this]() {
+        this->ui_.platformBothBtn->setChecked(true);
+        this->ui_.platformTwitchBtn->setChecked(false);
+        this->ui_.platformKickBtn->setChecked(false);
+        if (auto *merged = dynamic_cast<MergedChannel *>(this->split_->getChannel().get()))
+        {
+            merged->setPlatformSelection(PlatformSelection::Both);
+        }
+    });
+
+    QObject::connect(this->ui_.platformTwitchBtn, &QPushButton::clicked, [this]() {
+        this->ui_.platformBothBtn->setChecked(false);
+        this->ui_.platformTwitchBtn->setChecked(true);
+        this->ui_.platformKickBtn->setChecked(false);
+        if (auto *merged = dynamic_cast<MergedChannel *>(this->split_->getChannel().get()))
+        {
+            merged->setPlatformSelection(PlatformSelection::TwitchOnly);
+        }
+    });
+
+    QObject::connect(this->ui_.platformKickBtn, &QPushButton::clicked, [this]() {
+        this->ui_.platformBothBtn->setChecked(false);
+        this->ui_.platformTwitchBtn->setChecked(false);
+        this->ui_.platformKickBtn->setChecked(true);
+        if (auto *merged = dynamic_cast<MergedChannel *>(this->split_->getChannel().get()))
+        {
+            merged->setPlatformSelection(PlatformSelection::KickOnly);
+        }
+    });
+
+    // Hide platform selector by default (shown only for merged channels)
+    this->ui_.platformWrapper->hide();
 
     auto inputWrapper =
         layout.emplace<QWidget>().assign(&this->ui_.inputWrapper);

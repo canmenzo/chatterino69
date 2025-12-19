@@ -2,11 +2,17 @@
 
 #include "Application.hpp"
 #include "controllers/hotkeys/HotkeyController.hpp"
+#include "providers/kick/KickChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/Fonts.hpp"
+#include "singletons/Settings.hpp"
 #include "singletons/Theme.hpp"
+#include "util/UrlParser.hpp"
+#include "widgets/dialogs/SettingsDialog.hpp"
 
+#include <QComboBox>
 #include <QDialogButtonBox>
+#include <QMessageBox>
 #include <QEvent>
 #include <QFormLayout>
 #include <QGroupBox>
@@ -48,6 +54,33 @@ SelectChannelDialog::SelectChannelDialog(QWidget *parent)
     ui.channelLabel->setVisible(false);
     layout->addWidget(ui.channelLabel);
 
+    // Platform selector (visible when Kick integration is enabled)
+    ui.platformSelector = new QComboBox();
+    ui.platformSelector->addItem("Twitch", "twitch");
+    ui.platformSelector->addItem("Kick", "kick");
+    ui.platformSelector->setVisible(false);
+    layout->addWidget(ui.platformSelector);
+
+    QObject::connect(ui.platformSelector,
+                     QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+                     [this](int index) {
+                         Q_UNUSED(index);
+                         auto &ui = this->ui_;
+                         QString platform =
+                             ui.platformSelector->currentData().toString();
+                         if (platform == "kick")
+                         {
+                             ui.channelLabel->setText(
+                                 "Join a Kick channel by username or URL (e.g., "
+                                 "\"xqc\" or \"kick.com/xqc\")");
+                         }
+                         else
+                         {
+                             ui.channelLabel->setText(
+                                 "Join a Twitch channel by its channel name");
+                         }
+                     });
+
     ui.channelName = new QLineEdit();
     ui.channelName->setVisible(false);
     layout->addWidget(ui.channelName);
@@ -58,6 +91,10 @@ SelectChannelDialog::SelectChannelDialog(QWidget *parent)
                          ui.channelName->setVisible(enabled);
                          ui.channelLabel->setVisible(enabled);
 
+                         // Show platform selector if Kick integration is enabled
+                         bool kickEnabled = getSettings()->enableKickIntegration;
+                         ui.platformSelector->setVisible(enabled && kickEnabled);
+
                          if (enabled)
                          {
                              ui.channelName->setFocus();
@@ -67,6 +104,7 @@ SelectChannelDialog::SelectChannelDialog(QWidget *parent)
 
     ui.channel->installEventFilter(&this->tabFilter_);
     ui.channelName->installEventFilter(&this->tabFilter_);
+    ui.platformSelector->installEventFilter(&this->tabFilter_);
 
     // Whispers
     ui.whispers = new AutoCheckedRadioButton("Whispers");
@@ -241,8 +279,46 @@ IndirectChannel SelectChannelDialog::getSelectedChannel() const
 
     if (this->ui_.channel->isChecked())
     {
-        return getApp()->getTwitch()->getOrAddChannel(
-            this->ui_.channelName->text().trimmed());
+        QString channelText = this->ui_.channelName->text().trimmed();
+        QString platform = this->ui_.platformSelector->currentData().toString();
+
+        // Handle Kick channels
+        if (platform == "kick")
+        {
+            if (!getSettings()->enableKickIntegration)
+            {
+                // T100: Show prompt to enable Kick integration
+                QMessageBox msgBox(this);
+                msgBox.setWindowTitle("Kick Integration Disabled");
+                msgBox.setText(
+                    "Kick integration is currently disabled. Would you like to "
+                    "enable it?\n\n"
+                    "You can enable it in Settings → General → Kick Integration.");
+                msgBox.setIcon(QMessageBox::Question);
+                auto *enableBtn = msgBox.addButton("Open Settings", QMessageBox::AcceptRole);
+                msgBox.addButton("Cancel", QMessageBox::RejectRole);
+                msgBox.exec();
+
+                if (msgBox.clickedButton() == enableBtn)
+                {
+                    // Open settings dialog
+                    SettingsDialog::showDialog(this, SettingsDialogPreference::General);
+                }
+                return Channel::getEmpty();
+            }
+
+            // Parse Kick channel from URL or username
+            auto parsed = UrlParser::parseKickChannel(channelText);
+            QString kickSlug = parsed.has_value() ? parsed->channelSlug : channelText;
+
+            // Create and return KickChannel
+            auto kickChannel = std::make_shared<KickChannel>(kickSlug);
+            kickChannel->connect();
+            return kickChannel;
+        }
+
+        // Default to Twitch channel
+        return getApp()->getTwitch()->getOrAddChannel(channelText);
     }
 
     if (this->ui_.watching->isChecked())
@@ -415,6 +491,37 @@ void SelectChannelDialog::addShortcuts()
 
     this->shortcuts_ = getApp()->getHotkeys()->shortcutsForCategory(
         HotkeyCategory::PopupWindow, actions, this);
+}
+
+void SelectChannelDialog::updateKickIntegrationUI()
+{
+    bool kickEnabled = getSettings()->enableKickIntegration;
+    bool channelSelected = this->ui_.channel->isChecked();
+
+    this->ui_.platformSelector->setVisible(kickEnabled && channelSelected);
+
+    // Update label based on current platform selection
+    if (kickEnabled && channelSelected)
+    {
+        QString platform =
+            this->ui_.platformSelector->currentData().toString();
+        if (platform == "kick")
+        {
+            this->ui_.channelLabel->setText(
+                "Join a Kick channel by username or URL (e.g., "
+                "\"xqc\" or \"kick.com/xqc\")");
+        }
+        else
+        {
+            this->ui_.channelLabel->setText(
+                "Join a Twitch channel by its channel name");
+        }
+    }
+    else
+    {
+        this->ui_.channelLabel->setText(
+            "Join a Twitch channel by its channel name");
+    }
 }
 
 }  // namespace chatterino

@@ -745,6 +745,21 @@ void WindowManager::encodeChannel(IndirectChannel channel, QJsonObject &obj)
             obj.insert("name", channel.get()->getName());
         }
         break;
+        case Channel::Type::Kick: {
+            obj.insert("type", "kick");
+            obj.insert("name", channel.get()->getName());
+        }
+        break;
+        case Channel::Type::Merged: {
+            obj.insert("type", "merged");
+            obj.insert("name", channel.get()->getName());
+            // Store source channels as structured array
+            // TODO: Implement source channel serialization when MergedChannel
+            // is fully integrated
+            QJsonArray sources;
+            obj.insert("sources", sources);
+        }
+        break;
 
         default:
             break;
@@ -794,6 +809,20 @@ IndirectChannel WindowManager::decodeChannel(const SplitDescriptor &descriptor)
     {
         return getApp()->getTwitch()->getChannelOrEmpty(
             descriptor.channelName_);
+    }
+    else if (descriptor.type_ == "kick")
+    {
+        // TODO: Return Kick channel when KickProvider singleton is implemented
+        // For now, return empty channel
+        // return getApp()->getKick()->getOrAddChannel(descriptor.channelName_);
+        return Channel::getEmpty();
+    }
+    else if (descriptor.type_ == "merged")
+    {
+        // TODO: Reconstruct merged channel from source channels
+        // For now, return empty channel
+        // This will be implemented when MergedChannel is fully integrated
+        return Channel::getEmpty();
     }
 
     return Channel::getEmpty();

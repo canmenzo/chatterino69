@@ -645,6 +645,9 @@ public:
     IntSetting openFromToast = {"/notifications/openFromToast",
                                 static_cast<int>(ToastReaction::OpenInBrowser)};
 
+    /// Kick Integration
+    BoolSetting enableKickIntegration = {"/kick/enabled", false};
+
     /// External tools
     // Streamlink
     BoolSetting streamlinkUseCustomPath = {"/external/streamlink/useCustomPath",

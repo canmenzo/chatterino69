@@ -940,6 +940,103 @@ void GeneralPage::initLayout(GeneralPageView &layout)
             ->addTo(layout, form);
     }
 
+    layout.addTitle("Kick Integration");
+    layout.addDescription(
+        "Enable Kick.tv chat integration to view and send messages to Kick "
+        "channels. You can also merge Twitch and Kick channels into a single "
+        "view.");
+
+    SettingWidget::checkbox("Enable Kick integration", s.enableKickIntegration)
+        ->setTooltip(
+            "When enabled, you can add Kick.tv channels and optionally merge "
+            "them with Twitch channels for a unified chat experience. "
+            "Requires restart to fully take effect.")
+        ->addTo(layout);
+
+    // Kick account login status and button
+    {
+        auto *kickAccountLayout = new QHBoxLayout();
+
+        auto *kickStatusLabel = new QLabel("Not logged in to Kick");
+        kickStatusLabel->setStyleSheet("color: #888;");
+        kickAccountLayout->addWidget(kickStatusLabel);
+
+        auto *kickLoginButton = new QPushButton("Login with Kick");
+        kickLoginButton->setEnabled(s.enableKickIntegration);
+        kickAccountLayout->addWidget(kickLoginButton);
+
+        auto *kickLogoutButton = new QPushButton("Logout");
+        kickLogoutButton->setEnabled(false);
+        kickLogoutButton->setVisible(false);
+        kickAccountLayout->addWidget(kickLogoutButton);
+
+        kickAccountLayout->addStretch();
+        layout.addLayout(kickAccountLayout);
+
+        // Update UI based on Kick integration state
+        auto updateKickUI = [kickLoginButton, kickLogoutButton, kickStatusLabel] {
+            auto *app = getApp();
+            bool enabled = getSettings()->enableKickIntegration;
+            bool loggedIn = app->getAccounts()->kick.isLoggedIn();
+
+            kickLoginButton->setEnabled(enabled && !loggedIn);
+            kickLoginButton->setVisible(!loggedIn);
+            kickLogoutButton->setEnabled(enabled && loggedIn);
+            kickLogoutButton->setVisible(loggedIn);
+
+            if (!enabled)
+            {
+                kickStatusLabel->setText("Kick integration disabled");
+                kickStatusLabel->setStyleSheet("color: #888;");
+            }
+            else if (loggedIn)
+            {
+                QString username = app->getAccounts()->kick.getCurrentUsername();
+                kickStatusLabel->setText(QString("Logged in as: %1").arg(username));
+                kickStatusLabel->setStyleSheet("color: #53fc18;");
+            }
+            else
+            {
+                kickStatusLabel->setText("Not logged in to Kick");
+                kickStatusLabel->setStyleSheet("color: #888;");
+            }
+        };
+
+        // Initial state
+        updateKickUI();
+
+        // Connect settings change
+        s.enableKickIntegration.connect([updateKickUI](const auto &, auto) {
+            updateKickUI();
+        });
+
+        // Connect account changes
+        getApp()->getAccounts()->kick.currentUserChanged.connect(updateKickUI);
+
+        // Login button
+        QObject::connect(kickLoginButton, &QPushButton::clicked, [] {
+            getApp()->getAccounts()->kick.startLogin();
+        });
+
+        // Logout button
+        QObject::connect(kickLogoutButton, &QPushButton::clicked, [updateKickUI] {
+            getApp()->getAccounts()->kick.logout();
+            updateKickUI();
+        });
+
+        // Login result signals
+        std::ignore = getApp()->getAccounts()->kick.loginSucceeded.connect(
+            [updateKickUI](const auto &) {
+                updateKickUI();
+            });
+
+        std::ignore = getApp()->getAccounts()->kick.loginFailed.connect(
+            [kickStatusLabel](const QString &error) {
+                kickStatusLabel->setText(QString("Login failed: %1").arg(error));
+                kickStatusLabel->setStyleSheet("color: #ff4444;");
+            });
+    }
+
     layout.addTitle("AppData & Cache");
 
     layout.addSubtitle("Application Data");

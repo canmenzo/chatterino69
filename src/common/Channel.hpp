@@ -48,6 +48,10 @@ public:
         TwitchAutomod,
         /// TwitchEnd
         TwitchEnd,
+        /// Kick
+        Kick,
+        /// Merged (combines multiple channels from different platforms)
+        Merged,
         /// Misc
         Misc,
     };
