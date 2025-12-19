@@ -1,11 +1,18 @@
 #include "channels/MergedChannel.hpp"
 
 #include "common/QLogging.hpp"
+#include "messages/Emote.hpp"
+#include "messages/Image.hpp"
+#include "messages/ImageSet.hpp"
 #include "messages/Message.hpp"
 #include "messages/MessageBuilder.hpp"
+#include "messages/MessageElement.hpp"
 #include "messages/MessageFlag.hpp"
 
+#include <QPixmap>
+
 #include <algorithm>
+#include <chrono>
 
 namespace chatterino {
 
@@ -45,6 +52,7 @@ void MergedChannel::sendMessage(const QString &message)
         QString error;
     };
     std::vector<SendResult> results;
+    int platformsSentTo = 0;
 
     // Send to selected platforms
     for (const auto &channel : this->sourceChannels_)
@@ -75,6 +83,7 @@ void MergedChannel::sendMessage(const QString &message)
             {
                 // Attempt to send
                 channel->sendMessage(message);
+                platformsSentTo++;
             }
             else
             {
@@ -84,6 +93,28 @@ void MergedChannel::sendMessage(const QString &message)
 
             results.push_back(result);
         }
+    }
+
+    // Track sent message for deduplication when sent to both platforms
+    if (platformsSentTo > 1)
+    {
+        PendingSentMessage pending;
+        pending.messageText = message;
+        pending.sentTime = std::chrono::steady_clock::now();
+        pending.receivedFromPlatforms = 0;
+        this->pendingSentMessages_.push_back(pending);
+        
+        // Clean up old pending messages (older than 10 seconds)
+        auto now = std::chrono::steady_clock::now();
+        this->pendingSentMessages_.erase(
+            std::remove_if(this->pendingSentMessages_.begin(),
+                           this->pendingSentMessages_.end(),
+                           [now](const PendingSentMessage &msg) {
+                               return std::chrono::duration_cast<std::chrono::seconds>(
+                                          now - msg.sentTime)
+                                          .count() > 10;
+                           }),
+            this->pendingSentMessages_.end());
     }
 
     // T072/T076: Display per-platform send status
@@ -271,20 +302,120 @@ void MergedChannel::subscribeToChannel(const ChannelPtr &channel)
 void MergedChannel::onSourceMessageReceived(MessagePtr message,
                                             Channel::Type sourceType)
 {
-    // Set platform flag for UI display (flags is mutable so we can modify const messages)
-    // The renderer will use this flag to display platform indicators
+    // Check if this is a duplicate of our own sent message (sent to both platforms)
+    auto now = std::chrono::steady_clock::now();
+    for (auto &pending : this->pendingSentMessages_)
+    {
+        // Check if message text matches and within time window (10 seconds)
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - pending.sentTime).count();
+        if (elapsed <= 10 && message->messageText == pending.messageText)
+        {
+            pending.receivedFromPlatforms++;
+            
+            if (pending.receivedFromPlatforms == 1)
+            {
+                // First echo - show with "Both" badge
+                auto clonedMessage = message->clone();
+                clonedMessage->flags.set(MessageFlag::Twitch);
+                clonedMessage->flags.set(MessageFlag::Kick);
+                
+                // Add "Both" platform badge (Twick)
+                auto bothBadge = makeBothPlatformBadge();
+                if (bothBadge)
+                {
+                    auto badgeElement = std::make_unique<BadgeElement>(
+                        bothBadge, MessageElementFlag::BadgePlatform);
+                    
+                    size_t insertPos = 0;
+                    for (size_t i = 0; i < clonedMessage->elements.size(); i++)
+                    {
+                        if (clonedMessage->elements[i]->getFlags().has(
+                                MessageElementFlag::Timestamp))
+                        {
+                            insertPos = i + 1;
+                            break;
+                        }
+                    }
+                    
+                    if (insertPos > 0 && insertPos <= clonedMessage->elements.size())
+                    {
+                        clonedMessage->elements.insert(
+                            clonedMessage->elements.begin() +
+                                static_cast<ptrdiff_t>(insertPos),
+                            std::move(badgeElement));
+                    }
+                    else
+                    {
+                        clonedMessage->elements.insert(clonedMessage->elements.begin(),
+                                                       std::move(badgeElement));
+                    }
+                }
+                
+                this->addMessage(std::move(clonedMessage), MessageContext::Original);
+                qCDebug(chatterinoCommon) << "Displayed sent message with Both badge";
+            }
+            else
+            {
+                // Second echo - suppress duplicate
+                qCDebug(chatterinoCommon) << "Suppressed duplicate sent message from" 
+                                          << (sourceType == Channel::Type::Twitch ? "Twitch" : "Kick");
+            }
+            return;
+        }
+    }
+
+    // Normal message processing (not our own sent to both)
+    auto clonedMessage = message->clone();
+
+    // Set platform flag for UI display
     if (sourceType == Channel::Type::Twitch)
     {
-        message->flags.set(MessageFlag::Twitch);
+        clonedMessage->flags.set(MessageFlag::Twitch);
     }
     else if (sourceType == Channel::Type::Kick)
     {
-        message->flags.set(MessageFlag::Kick);
+        clonedMessage->flags.set(MessageFlag::Kick);
+    }
+
+    // Add platform favicon badge after the timestamp
+    auto platformBadge = makePlatformBadge(sourceType);
+    if (platformBadge)
+    {
+        auto badgeElement = std::make_unique<BadgeElement>(
+            platformBadge, MessageElementFlag::BadgePlatform);
+
+        // Find the position after the timestamp element
+        // Typical order: Timestamp, [Platform Badge], Badges, Username, Text
+        size_t insertPos = 0;
+        for (size_t i = 0; i < clonedMessage->elements.size(); i++)
+        {
+            if (clonedMessage->elements[i]->getFlags().has(
+                    MessageElementFlag::Timestamp))
+            {
+                insertPos = i + 1;
+                break;
+            }
+        }
+
+        // Insert the platform badge after timestamp
+        if (insertPos > 0 && insertPos <= clonedMessage->elements.size())
+        {
+            clonedMessage->elements.insert(
+                clonedMessage->elements.begin() +
+                    static_cast<ptrdiff_t>(insertPos),
+                std::move(badgeElement));
+        }
+        else
+        {
+            // Fallback: insert at beginning if no timestamp found
+            clonedMessage->elements.insert(clonedMessage->elements.begin(),
+                                           std::move(badgeElement));
+        }
     }
 
     // Add message chronologically based on serverReceivedTime
     // The Channel::addMessage handles chronological insertion
-    this->addMessage(message, MessageContext::Original);
+    this->addMessage(std::move(clonedMessage), MessageContext::Original);
 }
 
 QString MergedChannel::getPlatformPrefix(Channel::Type type)
@@ -298,6 +429,79 @@ QString MergedChannel::getPlatformPrefix(Channel::Type type)
         default:
             return "?";
     }
+}
+
+EmotePtr MergedChannel::makePlatformBadge(Channel::Type type)
+{
+    // Use local favicon resources as platform indicator badges
+    // These are small, recognizable icons that users will immediately understand
+
+    switch (type)
+    {
+        case Channel::Type::Twitch: {
+            // Load Twitch favicon from local resources (cached as static)
+            static auto twitchEmote = []() -> EmotePtr {
+                auto pixmap = QPixmap(":/platforms/twitch.png");
+                if (pixmap.isNull())
+                {
+                    qCWarning(chatterinoCommon) << "Failed to load Twitch platform badge from :/platforms/twitch.png";
+                    return nullptr;
+                }
+                auto image = Image::fromResourcePixmap(pixmap, 0.5);  // Scale down
+                return std::make_shared<Emote>(Emote{
+                    .name = EmoteName{"[Twitch]"},
+                    .images = ImageSet{image},
+                    .tooltip = Tooltip{"Message from Twitch"},
+                    .homePage = Url{"https://www.twitch.tv"},
+                });
+            }();
+            return twitchEmote;
+        }
+        case Channel::Type::Kick: {
+            // Load Kick favicon from local resources (cached as static)
+            static auto kickEmote = []() -> EmotePtr {
+                auto pixmap = QPixmap(":/platforms/kick.png");
+                if (pixmap.isNull())
+                {
+                    qCWarning(chatterinoCommon) << "Failed to load Kick platform badge from :/platforms/kick.png";
+                    return nullptr;
+                }
+                // Scale to match Twitch badge size (16x16): 48px * (1/3) = 16px
+                auto image = Image::fromResourcePixmap(pixmap, 1.0 / 3.0);
+                return std::make_shared<Emote>(Emote{
+                    .name = EmoteName{"[Kick]"},
+                    .images = ImageSet{image},
+                    .tooltip = Tooltip{"Message from Kick"},
+                    .homePage = Url{"https://kick.com"},
+                });
+            }();
+            return kickEmote;
+        }
+        default:
+            return nullptr;
+    }
+}
+
+EmotePtr MergedChannel::makeBothPlatformBadge()
+{
+    // Load Twick (Twitch+Kick combined) favicon from local resources (cached as static)
+    static auto twickEmote = []() -> EmotePtr {
+        auto pixmap = QPixmap(":/platforms/twick.png");
+        if (pixmap.isNull())
+        {
+            qCWarning(chatterinoCommon) << "Failed to load Twick platform badge from :/platforms/twick.png";
+            return nullptr;
+        }
+        // Scale to match other badges (16x16): 48px * (1/3) = 16px
+        auto image = Image::fromResourcePixmap(pixmap, 1.0 / 3.0);
+        return std::make_shared<Emote>(Emote{
+            .name = EmoteName{"[Both]"},
+            .images = ImageSet{image},
+            .tooltip = Tooltip{"Message sent to both Twitch and Kick"},
+            .homePage = Url{},
+        });
+    }();
+    return twickEmote;
 }
 
 void MergedChannel::addSystemMessage(const QString &text)

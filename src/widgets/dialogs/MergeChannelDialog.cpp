@@ -1,6 +1,9 @@
 #include "widgets/dialogs/MergeChannelDialog.hpp"
 
 #include "Application.hpp"
+#include "controllers/accounts/AccountController.hpp"
+#include "providers/kick/KickAccount.hpp"
+#include "providers/kick/KickApi.hpp"
 #include "providers/kick/KickChannel.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
@@ -27,10 +30,21 @@ ChannelPtr MergeChannelDialog::getSelectedChannel() const
     return this->selectedChannel_;
 }
 
+MergeViewType MergeChannelDialog::getMergeViewType() const
+{
+    return this->mergeViewType_;
+}
+
 void MergeChannelDialog::setOnMerge(
     std::function<void(ChannelPtr, ChannelPtr)> callback)
 {
     this->onMergeCallback_ = std::move(callback);
+}
+
+void MergeChannelDialog::setOnSplitView(
+    std::function<void(ChannelPtr, ChannelPtr)> callback)
+{
+    this->onSplitViewCallback_ = std::move(callback);
 }
 
 void MergeChannelDialog::setupUI()
@@ -87,6 +101,44 @@ void MergeChannelDialog::setupUI()
     this->suggestionLabel_ = new QLabel();
     this->suggestionLabel_->setStyleSheet("color: #888; font-style: italic;");
     this->mainLayout_->addWidget(this->suggestionLabel_);
+
+    // Add spacing
+    this->mainLayout_->addSpacing(10);
+
+    // Merge type selection
+    this->mergeTypeLabel_ = new QLabel("View type:");
+    this->mergeTypeLabel_->setStyleSheet("font-weight: bold;");
+    this->mainLayout_->addWidget(this->mergeTypeLabel_);
+
+    this->mergeTypeGroup_ = new QButtonGroup(this);
+
+    // Single view option (combined chat)
+    this->singleViewRadio_ = new QRadioButton("Combined view (single panel)");
+    this->singleViewRadio_->setChecked(true);
+    this->mergeTypeGroup_->addButton(this->singleViewRadio_,
+                                     static_cast<int>(MergeViewType::SingleView));
+    this->mainLayout_->addWidget(this->singleViewRadio_);
+
+    this->singleViewDescription_ = new QLabel(
+        "   Messages from both channels interleaved with [T]/[K] indicators");
+    this->singleViewDescription_->setStyleSheet(
+        "color: #888; font-size: 11px; margin-left: 20px;");
+    this->mainLayout_->addWidget(this->singleViewDescription_);
+
+    // Split view option (side-by-side)
+    this->splitViewRadio_ = new QRadioButton("Side-by-side view (two panels)");
+    this->mergeTypeGroup_->addButton(this->splitViewRadio_,
+                                     static_cast<int>(MergeViewType::SplitView));
+    this->mainLayout_->addWidget(this->splitViewRadio_);
+
+    this->splitViewDescription_ = new QLabel(
+        "   Each channel in its own panel, displayed next to each other");
+    this->splitViewDescription_->setStyleSheet(
+        "color: #888; font-size: 11px; margin-left: 20px;");
+    this->mainLayout_->addWidget(this->splitViewDescription_);
+
+    // Add spacing before buttons
+    this->mainLayout_->addSpacing(10);
 
     // Buttons
     auto *buttonLayout = new QHBoxLayout();
@@ -159,15 +211,47 @@ void MergeChannelDialog::onMergeClicked()
     }
     else if (platform == "kick")
     {
-        // TODO: Implement getOrAddChannel for Kick
-        // For now, create a new KickChannel
-        this->selectedChannel_ =
-            std::make_shared<KickChannel>(targetChannelName);
+        // Create KickChannel with account and API for sending messages
+        auto kickChannel = std::make_shared<KickChannel>(targetChannelName);
+
+        // Set up authentication from current Kick account
+        auto kickAccount = getApp()->getAccounts()->kick.getCurrent();
+        if (kickAccount && kickAccount->isAuthenticated())
+        {
+            kickChannel->setAccount(kickAccount);
+            kickChannel->setAuthenticated(true);
+
+            // Create API instance with account
+            auto kickApi = std::make_shared<KickApi>();
+            kickApi->setAccount(kickAccount);
+            kickChannel->setApi(kickApi);
+        }
+
+        // Connect the kick channel to start receiving messages
+        kickChannel->connect();
+
+        this->selectedChannel_ = kickChannel;
     }
 
-    if (this->selectedChannel_ && this->onMergeCallback_)
+    // Determine which merge type was selected
+    int selectedId = this->mergeTypeGroup_->checkedId();
+    this->mergeViewType_ = static_cast<MergeViewType>(selectedId);
+
+    if (this->selectedChannel_)
     {
-        this->onMergeCallback_(this->sourceChannel_, this->selectedChannel_);
+        if (this->mergeViewType_ == MergeViewType::SingleView &&
+            this->onMergeCallback_)
+        {
+            // Combined view - create a MergedChannel
+            this->onMergeCallback_(this->sourceChannel_, this->selectedChannel_);
+        }
+        else if (this->mergeViewType_ == MergeViewType::SplitView &&
+                 this->onSplitViewCallback_)
+        {
+            // Side-by-side view - open target channel in new split
+            this->onSplitViewCallback_(this->sourceChannel_,
+                                       this->selectedChannel_);
+        }
     }
 
     this->accept();

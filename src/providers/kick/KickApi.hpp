@@ -32,7 +32,7 @@ struct KickApiResult {
     std::optional<KickRateLimitInfo> rateLimit;
 };
 
-/// Kick.tv REST API client for sending messages and resolving channel info
+/// Kick.com REST API client for sending messages and resolving channel info
 class KickApi : public QObject
 {
     Q_OBJECT
@@ -53,6 +53,10 @@ public:
         int broadcasterUserId{0};
         int chatroomId{0};
         QString slug;
+        QString displayName;
+        bool isLive{false};
+        QString streamTitle;
+        int viewerCount{0};
         bool success{false};
     };
 

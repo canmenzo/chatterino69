@@ -943,13 +943,13 @@ void GeneralPage::initLayout(GeneralPageView &layout)
 
     layout.addTitle("Kick Integration");
     layout.addDescription(
-        "Enable Kick.tv chat integration to view and send messages to Kick "
+        "Enable Kick.com chat integration to view and send messages to Kick "
         "channels. You can also merge Twitch and Kick channels into a single "
         "view.");
 
     SettingWidget::checkbox("Enable Kick integration", s.enableKickIntegration)
         ->setTooltip(
-            "When enabled, you can add Kick.tv channels and optionally merge "
+            "When enabled, you can add Kick.com channels and optionally merge "
             "them with Twitch channels for a unified chat experience. "
             "Requires restart to fully take effect.")
         ->addTo(layout);

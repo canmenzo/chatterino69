@@ -531,6 +531,7 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
             auto *dialog = new MergeChannelDialog(
                 this->split_->getChannel(), this);
 
+            // Single view (combined) - creates a MergedChannel
             dialog->setOnMerge([this](ChannelPtr source, ChannelPtr target) {
                 // Create merged channel
                 std::vector<ChannelPtr> sources = {source, target};
@@ -538,8 +539,16 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
                     QString("%1 + %2").arg(source->getName(), target->getName()),
                     sources);
 
-                // Open in a new split
-                this->split_->openSplitRequested.invoke(mergedChannel);
+                // Replace current split with merged channel
+                this->split_->setChannel(
+                    IndirectChannel(mergedChannel, Channel::Type::Merged));
+            });
+
+            // Split view (side-by-side) - opens target in new split
+            dialog->setOnSplitView([this](ChannelPtr source, ChannelPtr target) {
+                Q_UNUSED(source);
+                // Keep current channel, just open the target in a new split next to it
+                this->split_->openSplitRequested.invoke(target);
             });
 
             dialog->setAttribute(Qt::WA_DeleteOnClose);
@@ -560,15 +569,11 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
                 if (merged)
                 {
                     auto sources = merged->unmerge();
-                    // Open the first source channel in this split
+                    // Just replace the merged view with the first source channel
+                    // Don't create additional splits - user can add them manually if needed
                     if (!sources.empty())
                     {
                         this->split_->setChannel(sources[0]);
-                    }
-                    // Open other sources in new splits
-                    for (size_t i = 1; i < sources.size(); ++i)
-                    {
-                        this->split_->openSplitRequested.invoke(sources[i]);
                     }
                 }
             });
@@ -970,14 +975,20 @@ void SplitHeader::updateChannelText()
         }
     }
 
-    // Handle Kick channel connection status
+    // Handle Kick channel connection status and live indicator
     if (auto *kickChannel = dynamic_cast<KickChannel *>(channel.get()))
     {
+        // Check live status for red dot indicator
+        if (kickChannel->isLive())
+        {
+            this->isLive_ = true;
+        }
+
         QString statusText;
         switch (kickChannel->getConnectionState())
         {
             case KickConnectionState::Connected:
-                statusText = " [Connected]";
+                statusText = kickChannel->isLive() ? " [LIVE]" : " [Connected]";
                 break;
             case KickConnectionState::Connecting:
                 statusText = " [Connecting...]";

@@ -4,6 +4,10 @@
 #include "common/network/NetworkRequest.hpp"
 #include "common/network/NetworkResult.hpp"
 
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QStringList>
+
 namespace {
 
 using namespace chatterino::literals;
@@ -40,8 +44,68 @@ void SeventvAPI::getUserByKickID(
     ErrorCallback &&onError)
 {
     // 7TV supports Kick channels via https://7tv.io/v3/users/KICK/{user_id}
+    // Note: Returns a "connection" object, not the full user profile
     NetworkRequest(API_URL_USER_KICK.arg(kickUserID), NetworkRequestType::Get)
         .timeout(20000)
+        .onSuccess(
+            [callback = std::move(onSuccess)](const NetworkResult &result) {
+                auto json = result.parseJson();
+                callback(json);
+            })
+        .onError([callback = std::move(onError)](const NetworkResult &result) {
+            callback(result);
+        })
+        .execute();
+}
+
+void SeventvAPI::getUserByID(const QString &seventvUserID,
+                             SuccessCallback<const QJsonObject &> &&onSuccess,
+                             ErrorCallback &&onError)
+{
+    // Direct 7TV user lookup: https://7tv.io/v3/users/{user_id}
+    // Returns full user profile including style with paint
+    QString url = QStringLiteral("https://7tv.io/v3/users/%1").arg(seventvUserID);
+    NetworkRequest(url, NetworkRequestType::Get)
+        .timeout(20000)
+        .onSuccess(
+            [callback = std::move(onSuccess)](const NetworkResult &result) {
+                auto json = result.parseJson();
+                callback(json);
+            })
+        .onError([callback = std::move(onError)](const NetworkResult &result) {
+            callback(result);
+        })
+        .execute();
+}
+
+void SeventvAPI::getCosmetics(const QStringList &ids,
+                              SuccessCallback<const QJsonObject &> &&onSuccess,
+                              ErrorCallback &&onError)
+{
+    // Build the GraphQL query with variables
+    // 7TV GraphQL API expects: query Cosmetics($list: [ObjectID!]) { cosmetics(list: $list) { ... } }
+    QJsonObject variables;
+    QJsonArray idArray;
+    for (const auto &id : ids)
+    {
+        idArray.append(id);
+    }
+    variables["list"] = idArray;
+
+    QJsonObject requestBody;
+    requestBody["query"] = QStringLiteral(
+        "query Cosmetics($list: [ObjectID!]) { "
+        "cosmetics(list: $list) { "
+        "badges { id name tooltip host { url files { name format width height } } } "
+        "paints { id name function color angle repeat stops { at color } "
+        "shadows { x_offset y_offset radius color } image_url } "
+        "} }");
+    requestBody["variables"] = variables;
+
+    NetworkRequest(u"https://7tv.io/v3/gql"_s, NetworkRequestType::Post)
+        .timeout(20000)
+        .header("Content-Type", "application/json")
+        .json(requestBody)
         .onSuccess(
             [callback = std::move(onSuccess)](const NetworkResult &result) {
                 auto json = result.parseJson();

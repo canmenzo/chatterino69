@@ -31,8 +31,14 @@ namespace chatterino {
 // from widgets/Window.hpp
 enum class WindowType;
 
+/// Describes a source channel for merged channels
+struct SourceChannelDescriptor {
+    QString type;  // "twitch" or "kick"
+    QString name;  // channel name
+};
+
 struct SplitDescriptor {
-    // Twitch or mentions or watching or live or automod or whispers or IRC
+    // Twitch or mentions or watching or live or automod or whispers or IRC or merged
     QString type_;
 
     // Twitch Channel name or IRC channel name
@@ -45,6 +51,9 @@ struct SplitDescriptor {
     bool moderationMode_{false};
 
     QList<QUuid> filters_;
+
+    // Source channels for merged channels
+    std::vector<SourceChannelDescriptor> sourceChannels_;
 
     static void loadFromJSON(SplitDescriptor &descriptor,
                              const QJsonObject &root, const QJsonObject &data);

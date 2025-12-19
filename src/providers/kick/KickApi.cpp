@@ -101,12 +101,28 @@ void KickApi::resolveChannelInfo(
             info.chatroomId = obj["id"].toInt();
         }
 
+        // Extract display name
+        if (obj.contains("user") && obj["user"].isObject())
+        {
+            info.displayName = obj["user"].toObject()["username"].toString();
+        }
+
+        // Extract livestream info (check if channel is live)
+        if (obj.contains("livestream") && !obj["livestream"].isNull())
+        {
+            QJsonObject livestream = obj["livestream"].toObject();
+            info.isLive = livestream["is_live"].toBool();
+            info.streamTitle = livestream["session_title"].toString();
+            info.viewerCount = livestream["viewer_count"].toInt();
+        }
+
         if (info.broadcasterUserId > 0 && info.chatroomId > 0)
         {
             info.success = true;
             qCDebug(chatterinoKick)
                 << "Resolved channel" << channelSlug
                 << "- broadcaster ID:" << info.broadcasterUserId
+                << "- isLive:" << info.isLive
                 << "- chatroom ID:" << info.chatroomId;
         }
         else

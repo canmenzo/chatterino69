@@ -1,7 +1,10 @@
 #include "widgets/dialogs/SelectChannelDialog.hpp"
 
 #include "Application.hpp"
+#include "controllers/accounts/AccountController.hpp"
 #include "controllers/hotkeys/HotkeyController.hpp"
+#include "providers/kick/KickAccount.hpp"
+#include "providers/kick/KickApi.hpp"
 #include "providers/kick/KickChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/Fonts.hpp"
@@ -311,8 +314,22 @@ IndirectChannel SelectChannelDialog::getSelectedChannel() const
             auto parsed = UrlParser::parseKickChannel(channelText);
             QString kickSlug = parsed.has_value() ? parsed->channelSlug : channelText;
 
-            // Create and return KickChannel
+            // Create KickChannel with account and API for sending messages
             auto kickChannel = std::make_shared<KickChannel>(kickSlug);
+
+            // Set up authentication from current Kick account
+            auto kickAccount = getApp()->getAccounts()->kick.getCurrent();
+            if (kickAccount && kickAccount->isAuthenticated())
+            {
+                kickChannel->setAccount(kickAccount);
+                kickChannel->setAuthenticated(true);
+
+                // Create API instance with account
+                auto kickApi = std::make_shared<KickApi>();
+                kickApi->setAccount(kickAccount);
+                kickChannel->setApi(kickApi);
+            }
+
             kickChannel->connect();
             return ChannelPtr(kickChannel);
         }

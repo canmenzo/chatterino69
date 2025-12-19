@@ -2,13 +2,16 @@
 
 #include "common/Aliases.hpp"
 #include "common/Channel.hpp"
+#include "messages/Emote.hpp"
 #include "providers/kick/KickMessage.hpp"
 
 #include <pajlada/signals/signal.hpp>
-
+#include <QSet>
 #include <QString>
 
 #include <memory>
+#include <optional>
+#include <shared_mutex>
 
 namespace chatterino {
 
@@ -27,7 +30,7 @@ enum class KickConnectionState {
     Failed
 };
 
-/// Represents a Kick.tv chat channel with real-time message streaming
+/// Represents a Kick.com chat channel with real-time message streaming
 class KickChannel : public Channel
 {
 public:
@@ -38,6 +41,7 @@ public:
     void sendMessage(const QString &message) override;
     bool isMod() const override;
     bool canSendMessage() const override;
+    bool isLive() const override;
 
     // Kick-specific methods
     void connect();
@@ -68,6 +72,9 @@ public:
     /// Signal emitted when connection state changes
     pajlada::Signals::Signal<KickConnectionState> connectionStateChanged;
 
+    /// Signal emitted when stream status changes (live/offline)
+    pajlada::Signals::NoArgSignal liveStatusChanged;
+
 private:
     /// Handle incoming Kick message from WebSocket
     void onMessageReceived(const KickMessage &message);
@@ -94,11 +101,24 @@ private:
     void parseMessageContent(MessageBuilder &builder, const QString &content,
                              const std::vector<KickEmote> &emotes);
 
+    /// Find a third-party emote (7TV, BTTV, FFZ) by name
+    /// @param word The emote name to look up
+    /// @return The emote if found, nullopt otherwise
+    std::optional<EmotePtr> findThirdPartyEmote(const QString &word) const;
+
+    /// Add text or emote to message builder, checking for third-party emotes
+    /// @param builder The MessageBuilder to add elements to
+    /// @param text The text to add (may contain emote names)
+    void addTextOrEmote(MessageBuilder &builder, const QString &text) const;
+
     QString channelSlug_;
     int chatroomId_{0};         // Used for WebSocket subscription
     int broadcasterUserId_{0};  // Used for REST API (sending messages)
     KickConnectionState connectionState_;
     bool isAuthenticated_{false};
+    bool isLive_{false};
+    QString streamTitle_;
+    int viewerCount_{0};
 
     std::unique_ptr<KickWebSocket> webSocket_;
     std::shared_ptr<KickApi> api_;
@@ -110,6 +130,15 @@ private:
     // Reconnection state
     int reconnectAttempts_{0};
     static constexpr int MAX_RECONNECT_ATTEMPTS = 5;
+
+    /// Load 7TV cosmetics (paints, badges) for a Kick user
+    /// @param kickUserId The Kick user ID
+    /// @param userName The username to assign cosmetics to
+    void loadUserSevenTVCosmetics(int kickUserId, const QString &userName);
+
+    /// Track users whose cosmetics we've already fetched
+    mutable std::shared_mutex loadedUsersMutex_;
+    QSet<int> usersWithLoadedCosmetics_;
 };
 
 }  // namespace chatterino

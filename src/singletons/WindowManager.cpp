@@ -3,8 +3,13 @@
 #include "Application.hpp"
 #include "common/Args.hpp"
 #include "common/QLogging.hpp"
+#include "controllers/accounts/AccountController.hpp"
 #include "debug/AssertInGuiThread.hpp"
+#include "channels/MergedChannel.hpp"
 #include "messages/MessageElement.hpp"
+#include "providers/kick/KickAccount.hpp"
+#include "providers/kick/KickApi.hpp"
+#include "providers/kick/KickChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/Paths.hpp"
 #include "singletons/Settings.hpp"
@@ -234,6 +239,7 @@ void WindowManager::updateWordTypeMask()
     flags.set(settings->showBadgesFfz ? MEF::BadgeFfz : MEF::None);
     flags.set(settings->showBadgesBttv ? MEF::BadgeBttv : MEF::None);
     flags.set(settings->showBadgesSevenTV ? MEF::BadgeSevenTV : MEF::None);
+    flags.set(MEF::BadgePlatform);  // Always show platform badges (Twitch/Kick) in merged channels
 
     // username
     flags.set(MEF::Username);
@@ -753,10 +759,27 @@ void WindowManager::encodeChannel(IndirectChannel channel, QJsonObject &obj)
         case Channel::Type::Merged: {
             obj.insert("type", "merged");
             obj.insert("name", channel.get()->getName());
-            // Store source channels as structured array
-            // TODO: Implement source channel serialization when MergedChannel
-            // is fully integrated
+
+            // Serialize source channels
             QJsonArray sources;
+            if (auto *mergedChannel =
+                    dynamic_cast<MergedChannel *>(channel.get().get()))
+            {
+                for (const auto &source : mergedChannel->getSourceChannels())
+                {
+                    QJsonObject sourceObj;
+                    if (source->getType() == Channel::Type::Twitch)
+                    {
+                        sourceObj.insert("type", "twitch");
+                    }
+                    else if (source->getType() == Channel::Type::Kick)
+                    {
+                        sourceObj.insert("type", "kick");
+                    }
+                    sourceObj.insert("name", source->getName());
+                    sources.append(sourceObj);
+                }
+            }
             obj.insert("sources", sources);
         }
         break;
@@ -812,17 +835,95 @@ IndirectChannel WindowManager::decodeChannel(const SplitDescriptor &descriptor)
     }
     else if (descriptor.type_ == "kick")
     {
-        // TODO: Return Kick channel when KickProvider singleton is implemented
-        // For now, return empty channel
-        // return getApp()->getKick()->getOrAddChannel(descriptor.channelName_);
-        return Channel::getEmpty();
+        // Create and connect a Kick channel
+        auto kickChannel =
+            std::make_shared<KickChannel>(descriptor.channelName_);
+
+        // Set up account and API if user is logged in to Kick
+        auto kickAccount = getApp()->getAccounts()->kick.getCurrent();
+        if (kickAccount)
+        {
+            auto api = std::make_shared<KickApi>();
+            api->setAccount(kickAccount);
+            kickChannel->setAccount(kickAccount);
+            kickChannel->setAuthenticated(true);
+            kickChannel->setApi(api);
+        }
+
+        kickChannel->connect();
+
+        // Wrap in IndirectChannel with Kick type
+        ChannelPtr channel = std::static_pointer_cast<Channel>(kickChannel);
+        return IndirectChannel(channel, Channel::Type::Kick);
     }
     else if (descriptor.type_ == "merged")
     {
-        // TODO: Reconstruct merged channel from source channels
-        // For now, return empty channel
-        // This will be implemented when MergedChannel is fully integrated
-        return Channel::getEmpty();
+        // Reconstruct merged channel from saved source channels
+        if (descriptor.sourceChannels_.empty())
+        {
+            qCWarning(chatterinoWindowmanager)
+                << "Cannot restore merged channel: no source channels saved";
+            return Channel::getEmpty();
+        }
+
+        std::vector<ChannelPtr> sourceChannels;
+        sourceChannels.reserve(descriptor.sourceChannels_.size());
+
+        for (const auto &source : descriptor.sourceChannels_)
+        {
+            ChannelPtr channel;
+
+            if (source.type == "twitch")
+            {
+                channel = getApp()->getTwitch()->getOrAddChannel(source.name);
+            }
+            else if (source.type == "kick")
+            {
+                // Create and connect a Kick channel
+                auto kickChannel = std::make_shared<KickChannel>(source.name);
+
+                // Set up account and API if user is logged in to Kick
+                auto kickAccount = getApp()->getAccounts()->kick.getCurrent();
+                if (kickAccount)
+                {
+                    auto api = std::make_shared<KickApi>();
+                    api->setAccount(kickAccount);
+                    kickChannel->setAccount(kickAccount);
+                    kickChannel->setAuthenticated(true);
+                    kickChannel->setApi(api);
+                }
+
+                kickChannel->connect();
+                channel = kickChannel;
+            }
+
+            if (channel && !channel->isEmpty())
+            {
+                sourceChannels.push_back(channel);
+            }
+        }
+
+        if (sourceChannels.size() < 2)
+        {
+            qCWarning(chatterinoWindowmanager)
+                << "Cannot restore merged channel: need at least 2 valid source channels";
+            // Return the first valid channel if we have one
+            if (!sourceChannels.empty())
+            {
+                return IndirectChannel(sourceChannels[0],
+                                       sourceChannels[0]->getType());
+            }
+            return Channel::getEmpty();
+        }
+
+        // Create the merged channel
+        auto mergedChannel = std::make_shared<MergedChannel>(
+            descriptor.channelName_, std::move(sourceChannels));
+
+        qCDebug(chatterinoWindowmanager)
+            << "Restored merged channel:" << descriptor.channelName_;
+
+        return IndirectChannel(mergedChannel, Channel::Type::Merged);
     }
 
     return Channel::getEmpty();

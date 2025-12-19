@@ -14,7 +14,7 @@
 namespace chatterino {
 
 /// Kick chat WebSocket connection using Pusher protocol
-/// Handles connection, subscription, and message parsing for Kick.tv chat
+/// Handles connection, subscription, and message parsing for Kick.com chat
 class KickWebSocket : public QObject
 {
     Q_OBJECT

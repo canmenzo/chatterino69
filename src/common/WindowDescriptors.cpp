@@ -111,6 +111,24 @@ void SplitDescriptor::loadFromJSON(SplitDescriptor &descriptor,
         descriptor.channelName_ = data.value("name").toString();
     }
     descriptor.filters_ = loadFilters(root.value("filters"));
+
+    // Load source channels for merged channels
+    if (descriptor.type_ == "merged" && data.contains("sources"))
+    {
+        const QJsonArray sourcesArray = data.value("sources").toArray();
+        descriptor.sourceChannels_.reserve(sourcesArray.size());
+        for (const QJsonValue &sourceVal : sourcesArray)
+        {
+            const QJsonObject sourceObj = sourceVal.toObject();
+            SourceChannelDescriptor source;
+            source.type = sourceObj.value("type").toString();
+            source.name = sourceObj.value("name").toString();
+            if (!source.type.isEmpty() && !source.name.isEmpty())
+            {
+                descriptor.sourceChannels_.push_back(source);
+            }
+        }
+    }
 }
 
 TabDescriptor TabDescriptor::loadFromJSON(const QJsonObject &tabObj)

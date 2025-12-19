@@ -44,6 +44,7 @@ struct KickEmotePosition {
 /// Emote information from Kick message
 struct KickEmote {
     QString emoteId;
+    QString emoteName;  // Emote display name (if provided by API)
     std::vector<KickEmotePosition> positions;
 
     static KickEmote fromJson(const QJsonObject &json);

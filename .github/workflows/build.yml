@@ -379,7 +379,8 @@ jobs:
   create-release:
     needs: [build-ubuntu-docker, build-flatpak, build]
     runs-on: ubuntu-latest
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/chatterino7')
+    # Run on push to chatterino7 branch OR on manual workflow_dispatch
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/chatterino7') || github.event_name == 'workflow_dispatch'
 
     steps:
       - uses: actions/checkout@v6

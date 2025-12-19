@@ -7,10 +7,14 @@
 
 #include <QString>
 
+#include <chrono>
 #include <memory>
 #include <vector>
 
 namespace chatterino {
+
+struct Emote;
+using EmotePtr = std::shared_ptr<const Emote>;
 
 /// Platform selection for sending messages in a merged channel
 enum class PlatformSelection {
@@ -79,12 +83,26 @@ private:
     /// Get platform prefix for display
     static QString getPlatformPrefix(Channel::Type type);
 
+    /// Create a platform indicator badge emote using favicon
+    static EmotePtr makePlatformBadge(Channel::Type type);
+
+    /// Create a combined platform badge for messages sent to both platforms
+    static EmotePtr makeBothPlatformBadge();
+
     /// Add a system message to the merged channel
     void addSystemMessage(const QString &text);
+
+    /// Struct to track messages sent to both platforms for deduplication
+    struct PendingSentMessage {
+        QString messageText;
+        std::chrono::steady_clock::time_point sentTime;
+        int receivedFromPlatforms{0};
+    };
 
     std::vector<ChannelPtr> sourceChannels_;
     PlatformSelection platformSelection_{PlatformSelection::Both};
     mutable QString cachedDisplayName_;
+    std::vector<PendingSentMessage> pendingSentMessages_;
 
     pajlada::Signals::SignalHolder signalHolder_;
 

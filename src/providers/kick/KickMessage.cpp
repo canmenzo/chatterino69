@@ -31,9 +31,22 @@ KickIdentity KickIdentity::fromJson(const QJsonObject &json)
 KickSender KickSender::fromJson(const QJsonObject &json)
 {
     KickSender sender;
-    sender.id = json["id"].toInt();
+    // Try both "user_id" (official API) and "id" (Pusher format) for user ID
+    if (json.contains("user_id"))
+    {
+        sender.id = json["user_id"].toInt();
+    }
+    else
+    {
+        sender.id = json["id"].toInt();
+    }
     sender.username = json["username"].toString();
     sender.slug = json["slug"].toString();
+    // Handle both "identity" and "channel_slug" for slug fallback
+    if (sender.slug.isEmpty() && json.contains("channel_slug"))
+    {
+        sender.slug = json["channel_slug"].toString();
+    }
     sender.identity = KickIdentity::fromJson(json["identity"].toObject());
     return sender;
 }
@@ -41,17 +54,53 @@ KickSender KickSender::fromJson(const QJsonObject &json)
 KickEmote KickEmote::fromJson(const QJsonObject &json)
 {
     KickEmote emote;
-    emote.emoteId = json["emote_id"].toString();
 
-    // Parse positions array: [{ "s": start, "e": end }, ...]
-    const auto positionsArray = json["positions"].toArray();
-    emote.positions.reserve(positionsArray.size());
-    for (const auto &posVal : positionsArray)
+    // Handle both "emote_id" and "id" field names
+    if (json.contains("emote_id"))
     {
-        QJsonObject posObj = posVal.toObject();
+        emote.emoteId = json["emote_id"].toString();
+    }
+    else if (json.contains("id"))
+    {
+        // Could be string or int
+        if (json["id"].isString())
+        {
+            emote.emoteId = json["id"].toString();
+        }
+        else
+        {
+            emote.emoteId = QString::number(json["id"].toInt());
+        }
+    }
+
+    // Store emote name if provided
+    if (json.contains("name"))
+    {
+        emote.emoteName = json["name"].toString();
+    }
+
+    // Handle both position formats:
+    // Format 1: positions array: [{ "s": start, "e": end }, ...]
+    // Format 2: direct start/end fields on the emote object
+    if (json.contains("positions"))
+    {
+        const auto positionsArray = json["positions"].toArray();
+        emote.positions.reserve(positionsArray.size());
+        for (const auto &posVal : positionsArray)
+        {
+            QJsonObject posObj = posVal.toObject();
+            KickEmotePosition pos;
+            pos.start = posObj["s"].toInt();
+            pos.end = posObj["e"].toInt();
+            emote.positions.push_back(pos);
+        }
+    }
+    else if (json.contains("start") && json.contains("end"))
+    {
+        // Direct start/end format
         KickEmotePosition pos;
-        pos.start = posObj["s"].toInt();
-        pos.end = posObj["e"].toInt();
+        pos.start = json["start"].toInt();
+        pos.end = json["end"].toInt();
         emote.positions.push_back(pos);
     }
 

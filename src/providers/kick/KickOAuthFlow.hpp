@@ -12,7 +12,7 @@
 
 namespace chatterino {
 
-/// OAuth 2.1 with PKCE authentication flow for Kick.tv
+/// OAuth 2.1 with PKCE authentication flow for Kick.com
 class KickOAuthFlow : public QObject
 {
     Q_OBJECT

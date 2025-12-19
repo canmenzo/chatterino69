@@ -82,6 +82,7 @@ jobs:
           conan profile detect -f
 
       - name: Install dependencies
+        shell: pwsh
         run: |
           mkdir build-test
           cd build-test
@@ -94,6 +95,7 @@ jobs:
 
       # The Windows runners currently use an older version of the CRT
       - name: Install CRT
+        shell: pwsh
         run: |
           mkdir -Force build-test/bin
           cp "$((ls $Env:VCToolsRedistDir/onecore/x64 -Filter '*.CRT')[0].FullName)/*" build-test/bin
@@ -106,6 +108,7 @@ jobs:
           rm httpbox.zip
 
       - name: Build
+        shell: pwsh
         run: |
           cmake `
               -G"NMake Makefiles" `
@@ -131,6 +134,7 @@ jobs:
 
       - name: Test
         timeout-minutes: 30
+        shell: pwsh
         run: |
           ..\httpbox\httpbox.exe --port 9051 &
           cd ..\pubsub-server-test

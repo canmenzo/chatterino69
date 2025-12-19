@@ -17,7 +17,7 @@ namespace chatterino {
 
 class KickAccount;
 
-/// Manages Kick.tv user accounts
+/// Manages Kick.com user accounts
 /// Similar to TwitchAccountManager but for Kick platform
 class KickAccountManager
 {

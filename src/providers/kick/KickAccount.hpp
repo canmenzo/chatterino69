@@ -13,7 +13,7 @@
 
 namespace chatterino {
 
-/// Represents a Kick.tv user account with OAuth authentication
+/// Represents a Kick.com user account with OAuth authentication
 class KickAccount : public Account
 {
 public:
