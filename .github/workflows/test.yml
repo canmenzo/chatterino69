@@ -48,6 +48,8 @@ jobs:
 
       - name: Install Qt WebSockets module
         run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -y install python3-pip
           pip3 install aqtinstall
           aqt install-qt linux desktop ${{ matrix.qt-version }} -m qtwebsockets --outputdir /tmp/qt-websockets
           # Copy the WebSockets module to the existing Qt installation
