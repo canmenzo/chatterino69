@@ -28,7 +28,7 @@ jobs:
         skip-crashpad: [false]
       fail-fast: false
     env:
-      QT_MODULES: qtimageformats
+      QT_MODULES: qtimageformats qtwebsockets
       C2_USE_OPENSSL3: ${{ startsWith(matrix.qt-version, '6.') && 'True' || 'False' }}
       C2_CONAN_CACHE_SUFFIX: ${{ startsWith(matrix.qt-version, '6.') && '-QT6' || '' }}
 
@@ -47,7 +47,7 @@ jobs:
         uses: jurplel/install-qt-action@v4.3.0
         with:
           cache: true
-          cache-key-prefix: ${{ runner.os }}-QtCache-${{ matrix.qt-version }}-v2
+          cache-key-prefix: ${{ runner.os }}-QtCache-${{ matrix.qt-version }}-v3
           modules: ${{ env.QT_MODULES }}
           version: ${{ matrix.qt-version }}
 
