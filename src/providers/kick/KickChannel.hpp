@@ -1,0 +1,144 @@
+#pragma once
+
+#include "common/Aliases.hpp"
+#include "common/Channel.hpp"
+#include "messages/Emote.hpp"
+#include "providers/kick/KickMessage.hpp"
+
+#include <pajlada/signals/signal.hpp>
+#include <QSet>
+#include <QString>
+
+#include <memory>
+#include <optional>
+#include <shared_mutex>
+
+namespace chatterino {
+
+class EmoteMap;
+class MessageBuilder;
+class KickWebSocket;
+class KickAccount;
+class KickApi;
+
+/// Connection state for a Kick channel
+enum class KickConnectionState {
+    Disconnected,
+    Connecting,
+    Connected,
+    Reconnecting,
+    Failed
+};
+
+/// Represents a Kick.com chat channel with real-time message streaming
+class KickChannel : public Channel
+{
+public:
+    explicit KickChannel(const QString &channelSlug);
+    ~KickChannel() override;
+
+    // Channel interface
+    void sendMessage(const QString &message) override;
+    bool isMod() const override;
+    bool canSendMessage() const override;
+    bool isLive() const override;
+
+    // Kick-specific methods
+    void connect();
+    void disconnect();
+    void reconnect() override;
+    [[nodiscard]] KickConnectionState getConnectionState() const;
+    [[nodiscard]] QString getChannelSlug() const;
+    [[nodiscard]] int getChatroomId() const;
+    [[nodiscard]] int getBroadcasterUserId() const;
+
+    // Authentication
+    void setAuthenticated(bool authenticated);
+    [[nodiscard]] bool isAuthenticated() const;
+
+    // API access
+    void setApi(std::shared_ptr<KickApi> api);
+    void setAccount(std::shared_ptr<KickAccount> account);
+
+    // Recent messages (stub - Kick history API not available)
+    void fetchRecentMessages();
+
+    /// Refresh 7TV channel emotes (uses Kick-specific 7TV endpoint)
+    void refreshSevenTVChannelEmotes();
+
+    /// Get 7TV emotes for this channel
+    [[nodiscard]] std::shared_ptr<const EmoteMap> getSeventvEmotes() const;
+
+    /// Signal emitted when connection state changes
+    pajlada::Signals::Signal<KickConnectionState> connectionStateChanged;
+
+    /// Signal emitted when stream status changes (live/offline)
+    pajlada::Signals::NoArgSignal liveStatusChanged;
+
+private:
+    /// Handle incoming Kick message from WebSocket
+    void onMessageReceived(const KickMessage &message);
+
+    /// Update connection state and emit signal
+    void setConnectionState(KickConnectionState state);
+
+    /// Resolve channel slug to chatroom ID and subscribe
+    void resolveAndSubscribe();
+
+    /// Handle WebSocket connection error
+    void handleConnectionError();
+
+    /// Schedule reconnection with exponential backoff
+    void scheduleReconnect();
+
+    /// Add a system message to the channel
+    void addSystemMessage(const QString &text);
+
+    /// Parse message content and emotes into message elements
+    /// @param builder The MessageBuilder to add elements to
+    /// @param content The raw message content
+    /// @param emotes The emote list with positions
+    void parseMessageContent(MessageBuilder &builder, const QString &content,
+                             const std::vector<KickEmote> &emotes);
+
+    /// Find a third-party emote (7TV, BTTV, FFZ) by name
+    /// @param word The emote name to look up
+    /// @return The emote if found, nullopt otherwise
+    std::optional<EmotePtr> findThirdPartyEmote(const QString &word) const;
+
+    /// Add text or emote to message builder, checking for third-party emotes
+    /// @param builder The MessageBuilder to add elements to
+    /// @param text The text to add (may contain emote names)
+    void addTextOrEmote(MessageBuilder &builder, const QString &text) const;
+
+    QString channelSlug_;
+    int chatroomId_{0};         // Used for WebSocket subscription
+    int broadcasterUserId_{0};  // Used for REST API (sending messages)
+    KickConnectionState connectionState_;
+    bool isAuthenticated_{false};
+    bool isLive_{false};
+    QString streamTitle_;
+    int viewerCount_{0};
+
+    std::unique_ptr<KickWebSocket> webSocket_;
+    std::shared_ptr<KickApi> api_;
+    std::shared_ptr<KickAccount> account_;
+
+    // 7TV emotes for this Kick channel
+    std::shared_ptr<const EmoteMap> seventvEmotes_;
+
+    // Reconnection state
+    int reconnectAttempts_{0};
+    static constexpr int MAX_RECONNECT_ATTEMPTS = 5;
+
+    /// Load 7TV cosmetics (paints, badges) for a Kick user
+    /// @param kickUserId The Kick user ID
+    /// @param userName The username to assign cosmetics to
+    void loadUserSevenTVCosmetics(int kickUserId, const QString &userName);
+
+    /// Track users whose cosmetics we've already fetched
+    mutable std::shared_mutex loadedUsersMutex_;
+    QSet<int> usersWithLoadedCosmetics_;
+};
+
+}  // namespace chatterino

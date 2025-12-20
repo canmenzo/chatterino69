@@ -10,9 +10,12 @@
 #include "controllers/hotkeys/HotkeyCategory.hpp"
 #include "controllers/hotkeys/HotkeyController.hpp"
 #include "controllers/notifications/NotificationController.hpp"
+#include "channels/MergedChannel.hpp"
+#include "providers/kick/KickChannel.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
+#include "widgets/dialogs/MergeChannelDialog.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/StreamerMode.hpp"
 #include "singletons/Theme.hpp"
@@ -521,6 +524,62 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
 
     menu->addSeparator();
 
+    // Merge with another channel (T058-T061)
+    if (getSettings()->enableKickIntegration)
+    {
+        auto *mergeAction = menu->addAction("Merge with...", this, [this]() {
+            auto *dialog = new MergeChannelDialog(
+                this->split_->getChannel(), this);
+
+            // Single view (combined) - creates a MergedChannel
+            dialog->setOnMerge([this](ChannelPtr source, ChannelPtr target) {
+                // Create merged channel
+                std::vector<ChannelPtr> sources = {source, target};
+                auto mergedChannel = std::make_shared<MergedChannel>(
+                    QString("%1 + %2").arg(source->getName(), target->getName()),
+                    sources);
+
+                // Replace current split with merged channel
+                this->split_->setChannel(
+                    IndirectChannel(mergedChannel, Channel::Type::Merged));
+            });
+
+            // Split view (side-by-side) - opens target in new split
+            dialog->setOnSplitView([this](ChannelPtr source, ChannelPtr target) {
+                Q_UNUSED(source);
+                // Keep current channel, just open the target in a new split next to it
+                this->split_->openSplitRequested.invoke(target);
+            });
+
+            dialog->setAttribute(Qt::WA_DeleteOnClose);
+            dialog->show();
+        });
+
+        // Enable merge only for Twitch or Kick channels
+        auto channelType = this->split_->getChannel()->getType();
+        mergeAction->setEnabled(channelType == Channel::Type::Twitch ||
+                                channelType == Channel::Type::Kick);
+
+        // T099: Unmerge option for merged channels
+        if (channelType == Channel::Type::Merged)
+        {
+            menu->addAction("Unmerge channels", this, [this]() {
+                auto *merged = dynamic_cast<MergedChannel *>(
+                    this->split_->getChannel().get());
+                if (merged)
+                {
+                    auto sources = merged->unmerge();
+                    // Just replace the merged view with the first source channel
+                    // Don't create additional splits - user can add them manually if needed
+                    if (!sources.empty())
+                    {
+                        this->split_->setChannel(sources[0]);
+                    }
+                }
+            });
+        }
+    }
+
     {
         // "How to..." sub menu
         auto *subMenu = new QMenu("How to...", this);
@@ -816,6 +875,14 @@ void SplitHeader::handleChannelChanged()
                 this->updateChannelText();
             });
     }
+    else if (auto *kickChannel = dynamic_cast<KickChannel *>(channel.get()))
+    {
+        this->channelConnections_.managedConnect(
+            kickChannel->connectionStateChanged,
+            [this](KickConnectionState /*state*/) {
+                this->updateChannelText();
+            });
+    }
 }
 
 void SplitHeader::scaleChangedEvent(float scale)
@@ -906,6 +973,40 @@ void SplitHeader::updateChannelText()
         {
             this->tooltipText_ = formatOfflineTooltip(*streamStatus);
         }
+    }
+
+    // Handle Kick channel connection status and live indicator
+    if (auto *kickChannel = dynamic_cast<KickChannel *>(channel.get()))
+    {
+        // Check live status for red dot indicator
+        if (kickChannel->isLive())
+        {
+            this->isLive_ = true;
+        }
+
+        QString statusText;
+        switch (kickChannel->getConnectionState())
+        {
+            case KickConnectionState::Connected:
+                statusText = kickChannel->isLive() ? " [LIVE]" : " [Connected]";
+                break;
+            case KickConnectionState::Connecting:
+                statusText = " [Connecting...]";
+                break;
+            case KickConnectionState::Reconnecting:
+                statusText = " [Reconnecting...]";
+                break;
+            case KickConnectionState::Disconnected:
+                statusText = " [Disconnected]";
+                break;
+            case KickConnectionState::Failed:
+                statusText = " [Connection Failed]";
+                break;
+        }
+        title = "Kick: " + title + statusText;
+        this->tooltipText_ = QString("Kick channel: %1\nStatus: %2")
+                                 .arg(kickChannel->getChannelSlug())
+                                 .arg(statusText.trimmed().mid(1, statusText.length() - 2));
     }
 
     if (!title.isEmpty() && !this->split_->getFilters().empty())

@@ -72,7 +72,23 @@ jobs:
           sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-18 42
           sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-18 42
 
+      - name: Install Qt WebSockets module
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -y install python3-pip
+          pip3 install aqtinstall
+          aqt install-qt linux desktop ${{ matrix.qt-version }} -m qtwebsockets --outputdir /tmp/qt-websockets
+          # Copy the WebSockets module to the existing Qt installation
+          sudo cp -r /tmp/qt-websockets/${{ matrix.qt-version }}/gcc_64/lib/cmake/Qt6WebSockets "$Qt6_DIR/lib/cmake/" || true
+          sudo cp -r /tmp/qt-websockets/${{ matrix.qt-version }}/gcc_64/lib/cmake/Qt6WebSocketsPrivate "$Qt6_DIR/lib/cmake/" || true
+          sudo cp /tmp/qt-websockets/${{ matrix.qt-version }}/gcc_64/lib/libQt6WebSockets* "$Qt6_DIR/lib/" || true
+          sudo cp -r /tmp/qt-websockets/${{ matrix.qt-version }}/gcc_64/include/QtWebSockets "$Qt6_DIR/include/" || true
+          sudo cp -r /tmp/qt-websockets/${{ matrix.qt-version }}/gcc_64/include/QtWebSocketsPrivate "$Qt6_DIR/include/" || true
+
       - name: Build
+        env:
+          KICK_CLIENT_ID: ${{ secrets.KICK_CLIENT_ID }}
+          KICK_CLIENT_SECRET: ${{ secrets.KICK_CLIENT_SECRET }}
         run: |
           mkdir build
           cd build
@@ -86,6 +102,8 @@ jobs:
             -DCMAKE_PREFIX_PATH="$Qt6_DIR/lib/cmake" \
             -DCHATTERINO_STATIC_QT_BUILD=On \
             -DFORCE_JSON_GENERATION=${{matrix.os == 'ubuntu-24.04' && 'On' || 'Off'}} \
+            -DCHATTERINO_KICK_CLIENT_ID="$KICK_CLIENT_ID" \
+            -DCHATTERINO_KICK_CLIENT_SECRET="$KICK_CLIENT_SECRET" \
             ..
           make -j"$(nproc)"
 
@@ -172,8 +190,8 @@ jobs:
         uses: jurplel/install-qt-action@v4.3.0
         with:
           cache: true
-          cache-key-prefix: ${{ runner.os }}-QtCache-${{ matrix.qt-version }}-v2
-          modules: qtimageformats
+          cache-key-prefix: ${{ runner.os }}-QtCache-${{ matrix.qt-version }}-v3
+          modules: qtimageformats qtwebsockets
           version: ${{ matrix.qt-version }}
 
       # WINDOWS
@@ -230,6 +248,9 @@ jobs:
       - name: Build (Windows)
         if: startsWith(matrix.os, 'windows')
         shell: pwsh
+        env:
+          KICK_CLIENT_ID: ${{ secrets.KICK_CLIENT_ID }}
+          KICK_CLIENT_SECRET: ${{ secrets.KICK_CLIENT_SECRET }}
         run: |
           cd build
           cmake `
@@ -240,6 +261,8 @@ jobs:
               -DBUILD_WITH_CRASHPAD="$Env:C2_ENABLE_CRASHPAD" `
               -DCHATTERINO_LTO="$Env:C2_ENABLE_LTO" `
               -DFORCE_JSON_GENERATION=On `
+              -DCHATTERINO_KICK_CLIENT_ID="$Env:KICK_CLIENT_ID" `
+              -DCHATTERINO_KICK_CLIENT_SECRET="$Env:KICK_CLIENT_SECRET" `
               ..
           set cl=/MP
           nmake /S /NOLOGO
@@ -301,6 +324,9 @@ jobs:
 
       - name: Build (MacOS)
         if: startsWith(matrix.os, 'macos')
+        env:
+          KICK_CLIENT_ID: ${{ secrets.KICK_CLIENT_ID }}
+          KICK_CLIENT_SECRET: ${{ secrets.KICK_CLIENT_SECRET }}
         run: |
           mkdir -p build
           cd build
@@ -312,6 +338,8 @@ jobs:
               -DCHATTERINO_NO_AVIF_PLUGIN=On \
               -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
               -DFORCE_JSON_GENERATION=Off \
+              -DCHATTERINO_KICK_CLIENT_ID="$KICK_CLIENT_ID" \
+              -DCHATTERINO_KICK_CLIENT_SECRET="$KICK_CLIENT_SECRET" \
               ..
           make -j"$(sysctl -n hw.logicalcpu)"
         shell: bash
@@ -379,7 +407,8 @@ jobs:
   create-release:
     needs: [build-ubuntu-docker, build-flatpak, build]
     runs-on: ubuntu-latest
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/chatterino7')
+    # Run on push to chatterino7 branch OR on manual workflow_dispatch
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/chatterino7') || github.event_name == 'workflow_dispatch'
 
     steps:
       - uses: actions/checkout@v6

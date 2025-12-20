@@ -59,6 +59,14 @@ set(test_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/TwitchChannel.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/TwitchUserColor.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/FunctionRef.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/KickApi.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/KickChannel.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/KickMessage.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/KickOAuthFlow.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/KickWebSocket.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/MergedChannel.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/UrlParser.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/MergedChannel.cpp
 
     ${CMAKE_CURRENT_LIST_DIR}/src/lib/Snapshot.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/lib/Snapshot.hpp

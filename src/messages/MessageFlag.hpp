@@ -73,6 +73,10 @@ enum class MessageFlag : std::int64_t {
     /// Note: If this message is inside a reply thread, the root must not have the flag either.
     InvalidReplyTarget = (1LL << 42),
     WatchStreak = (1LL << 43),
+    /// The message is from the Kick platform (used in merged channels)
+    Kick = (1LL << 44),
+    /// The message is from the Twitch platform (used in merged channels)
+    Twitch = (1LL << 45),
 };
 using MessageFlags = FlagsEnum<MessageFlag>;
 

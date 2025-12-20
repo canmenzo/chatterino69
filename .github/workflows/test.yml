@@ -46,6 +46,19 @@ jobs:
           sudo DEBIAN_FRONTEND=noninteractive apt -y --no-install-recommends install \
             libbenchmark-dev gcovr gnupg
 
+      - name: Install Qt WebSockets module
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -y install python3-pip
+          pip3 install aqtinstall
+          aqt install-qt linux desktop ${{ matrix.qt-version }} -m qtwebsockets --outputdir /tmp/qt-websockets
+          # Copy the WebSockets module to the existing Qt installation
+          sudo cp -r /tmp/qt-websockets/${{ matrix.qt-version }}/gcc_64/lib/cmake/Qt6WebSockets "$Qt6_DIR/lib/cmake/" || true
+          sudo cp -r /tmp/qt-websockets/${{ matrix.qt-version }}/gcc_64/lib/cmake/Qt6WebSocketsPrivate "$Qt6_DIR/lib/cmake/" || true
+          sudo cp /tmp/qt-websockets/${{ matrix.qt-version }}/gcc_64/lib/libQt6WebSockets* "$Qt6_DIR/lib/" || true
+          sudo cp -r /tmp/qt-websockets/${{ matrix.qt-version }}/gcc_64/include/QtWebSockets "$Qt6_DIR/include/" || true
+          sudo cp -r /tmp/qt-websockets/${{ matrix.qt-version }}/gcc_64/include/QtWebSocketsPrivate "$Qt6_DIR/include/" || true
+
       - name: Install httpbox
         run: |
           curl -L -o httpbox.tar.xz "https://github.com/Chatterino/httpbox/releases/download/${{ env.HTTPBOX_TAG }}/httpbox-x86_64-unknown-linux-gnu.tar.xz"

@@ -9,6 +9,7 @@
 #include <QPaintEvent>
 #include <QPointer>
 #include <QPropertyAnimation>
+#include <QPushButton>
 #include <QTextEdit>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -148,6 +149,14 @@ protected:
         MessageView *replyMessage;
         QLabel *replyLabel;
         SvgButton *cancelReplyButton;
+
+        // Platform selection for merged channels (T072-T077)
+        QWidget *platformWrapper;
+        QHBoxLayout *platformHbox;
+        QPushButton *platformBothBtn;
+        QPushButton *platformTwitchBtn;
+        QPushButton *platformKickBtn;
+        QLabel *platformStatusLabel;
 
         // input widgets
         QWidget *inputWrapper;

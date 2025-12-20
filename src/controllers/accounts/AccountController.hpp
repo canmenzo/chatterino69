@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common/SignalVector.hpp"
+#include "providers/kick/KickAccountManager.hpp"
 #include "providers/twitch/TwitchAccountManager.hpp"
 
 #include <QObject>
@@ -26,6 +27,7 @@ public:
     void load();
 
     TwitchAccountManager twitch;
+    KickAccountManager kick;
 
 private:
     SignalVector<std::shared_ptr<Account>> accounts_;

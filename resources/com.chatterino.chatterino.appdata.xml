@@ -11,11 +11,12 @@
     <name>Chatterino</name>
     <developer_name>Chatterino Developers</developer_name>
     <summary>
-        Chat client for twitch.tv
+        Chat client for Twitch.tv and Kick.com with 7TV support
     </summary>
     <description>
         <p>
-            Chatterino is a chat client for Twitch.tv.
+            Chatterino7 is a chat client for Twitch.tv and Kick.com with full 7TV emote support.
+            Features merged chat views, platform indicator badges, and live status indicators.
         </p>
     </description>
     <screenshots>
@@ -26,6 +27,9 @@
     <keywords>
         <keyword>chat</keyword>
         <keyword>twitch</keyword>
+        <keyword>kick</keyword>
+        <keyword>7tv</keyword>
+        <keyword>streaming</keyword>
     </keywords>
     <url type="homepage">https://chatterino.com/</url>
     <url type="bugtracker">https://chatterino.com/link/issues</url>

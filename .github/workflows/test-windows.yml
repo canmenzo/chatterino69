@@ -28,7 +28,7 @@ jobs:
         skip-crashpad: [false]
       fail-fast: false
     env:
-      QT_MODULES: qtimageformats
+      QT_MODULES: qtimageformats qtwebsockets
       C2_USE_OPENSSL3: ${{ startsWith(matrix.qt-version, '6.') && 'True' || 'False' }}
       C2_CONAN_CACHE_SUFFIX: ${{ startsWith(matrix.qt-version, '6.') && '-QT6' || '' }}
 
@@ -47,7 +47,7 @@ jobs:
         uses: jurplel/install-qt-action@v4.3.0
         with:
           cache: true
-          cache-key-prefix: ${{ runner.os }}-QtCache-${{ matrix.qt-version }}-v2
+          cache-key-prefix: ${{ runner.os }}-QtCache-${{ matrix.qt-version }}-v3
           modules: ${{ env.QT_MODULES }}
           version: ${{ matrix.qt-version }}
 
@@ -82,6 +82,7 @@ jobs:
           conan profile detect -f
 
       - name: Install dependencies
+        shell: pwsh
         run: |
           mkdir build-test
           cd build-test
@@ -94,6 +95,7 @@ jobs:
 
       # The Windows runners currently use an older version of the CRT
       - name: Install CRT
+        shell: pwsh
         run: |
           mkdir -Force build-test/bin
           cp "$((ls $Env:VCToolsRedistDir/onecore/x64 -Filter '*.CRT')[0].FullName)/*" build-test/bin
@@ -106,6 +108,7 @@ jobs:
           rm httpbox.zip
 
       - name: Build
+        shell: pwsh
         run: |
           cmake `
               -G"NMake Makefiles" `
@@ -131,6 +134,7 @@ jobs:
 
       - name: Test
         timeout-minutes: 30
+        shell: pwsh
         run: |
           ..\httpbox\httpbox.exe --port 9051 &
           cd ..\pubsub-server-test

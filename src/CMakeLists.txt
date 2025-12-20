@@ -507,6 +507,26 @@ set(SOURCE_FILES
         providers/twitch/api/Helix.cpp
         providers/twitch/api/Helix.hpp
 
+        channels/MergedChannel.cpp
+        channels/MergedChannel.hpp
+
+        providers/kick/KickAccount.cpp
+        providers/kick/KickAccount.hpp
+        providers/kick/KickAccountManager.cpp
+        providers/kick/KickAccountManager.hpp
+        providers/kick/KickApi.cpp
+        providers/kick/KickApi.hpp
+        providers/kick/KickChannel.cpp
+        providers/kick/KickChannel.hpp
+        providers/kick/KickEmotes.cpp
+        providers/kick/KickEmotes.hpp
+        providers/kick/KickMessage.cpp
+        providers/kick/KickMessage.hpp
+        providers/kick/KickOAuthFlow.cpp
+        providers/kick/KickOAuthFlow.hpp
+        providers/kick/KickWebSocket.cpp
+        providers/kick/KickWebSocket.hpp
+
         singletons/CrashHandler.cpp
         singletons/CrashHandler.hpp
         singletons/Fonts.cpp
@@ -611,6 +631,8 @@ set(SOURCE_FILES
         util/XDGDirectory.hpp
         util/XDGHelper.cpp
         util/XDGHelper.hpp
+        util/UrlParser.cpp
+        util/UrlParser.hpp
 
         util/serialize/Container.hpp
 
@@ -702,6 +724,8 @@ set(SOURCE_FILES
         widgets/dialogs/LastRunCrashDialog.hpp
         widgets/dialogs/LoginDialog.cpp
         widgets/dialogs/LoginDialog.hpp
+        widgets/dialogs/MergeChannelDialog.cpp
+        widgets/dialogs/MergeChannelDialog.hpp
         widgets/dialogs/QualityPopup.cpp
         widgets/dialogs/QualityPopup.hpp
         widgets/dialogs/ReplyThreadPopup.cpp
@@ -929,6 +953,7 @@ target_link_libraries(${LIBRARY_PROJECT}
         Qt${MAJOR_QT_VERSION}::Network
         Qt${MAJOR_QT_VERSION}::Svg
         Qt${MAJOR_QT_VERSION}::Concurrent
+        Qt${MAJOR_QT_VERSION}::WebSockets
 
         LibCommuni::LibCommuni
         Pajlada::Serialize
@@ -1354,6 +1379,20 @@ endif()
 if(NOT CHATTERINO_UPDATER)
     message(STATUS "Disabling the updater.")
     target_compile_definitions(${LIBRARY_PROJECT} PUBLIC CHATTERINO_DISABLE_UPDATER)
+endif()
+
+# Kick OAuth credentials - pass to code if provided
+if(CHATTERINO_KICK_CLIENT_ID)
+    message(STATUS "Kick Client ID configured")
+    target_compile_definitions(${LIBRARY_PROJECT} PRIVATE
+        CHATTERINO_KICK_CLIENT_ID="${CHATTERINO_KICK_CLIENT_ID}"
+    )
+endif()
+if(CHATTERINO_KICK_CLIENT_SECRET)
+    message(STATUS "Kick Client Secret configured")
+    target_compile_definitions(${LIBRARY_PROJECT} PRIVATE
+        CHATTERINO_KICK_CLIENT_SECRET="${CHATTERINO_KICK_CLIENT_SECRET}"
+    )
 endif()
 
 if (DOXYGEN_FOUND)

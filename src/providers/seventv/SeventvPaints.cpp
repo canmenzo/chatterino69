@@ -5,11 +5,14 @@
 #include "common/network/NetworkRequest.hpp"
 #include "common/network/NetworkResult.hpp"
 #include "common/Outcome.hpp"
+#include "common/QLogging.hpp"
 #include "messages/Image.hpp"
 #include "providers/seventv/paints/LinearGradientPaint.hpp"
 #include "providers/seventv/paints/PaintDropShadow.hpp"
 #include "providers/seventv/paints/RadialGradientPaint.hpp"
 #include "providers/seventv/paints/UrlPaint.hpp"
+#include "providers/seventv/SeventvAPI.hpp"
+#include "providers/seventv/SeventvBadges.hpp"
 #include "singletons/WindowManager.hpp"
 #include "util/DebugCount.hpp"
 #include "util/PostToThread.hpp"
@@ -213,6 +216,151 @@ void SeventvPaints::clearPaintFromUser(const QString &paintID,
         postToThread([] {
             getApp()->getWindows()->invalidateChannelViewBuffers();
         });
+    }
+}
+
+void SeventvPaints::loadUserCosmetics(const QJsonObject &userJson,
+                                      const QString &userName,
+                                      const QString &visibleUserID)
+{
+    // 7TV user response structure:
+    // {
+    //   "user": {
+    //     "style": {
+    //       "paint_id": "...",
+    //       "paint": { ... paint object ... },
+    //       "badge_id": "...",
+    //       "badge": { ... badge object ... }
+    //     }
+    //   }
+    // }
+    // OR directly:
+    // {
+    //   "style": {
+    //     "paint_id": "...",
+    //     "paint": { ... paint object ... }
+    //   }
+    // }
+
+    QJsonObject user = userJson;
+
+    // Check if there's a nested "user" object
+    if (userJson.contains("user") && userJson["user"].isObject())
+    {
+        user = userJson["user"].toObject();
+    }
+
+    if (!user.contains("style") || !user["style"].isObject())
+    {
+        return;
+    }
+
+    QJsonObject style = user["style"].toObject();
+
+    // Check for paint
+    if (style.contains("paint") && style["paint"].isObject())
+    {
+        QJsonObject paintJson = style["paint"].toObject();
+        QString paintId = paintJson["id"].toString();
+
+        if (!paintId.isEmpty())
+        {
+            // Add the paint definition
+            this->addPaint(paintJson);
+
+            // Assign it to the user
+            this->assignPaintToUser(paintId, UserName{userName.toLower()});
+        }
+    }
+    else if (style.contains("paint_id") && !style["paint_id"].isNull())
+    {
+        // Sometimes only paint_id is provided without the full paint object
+        // In this case, we can't create the paint, but if we've seen it before
+        // from another user, we can assign it
+        QString paintId = style["paint_id"].toString();
+        if (!paintId.isEmpty())
+        {
+            this->assignPaintToUser(paintId, UserName{userName.toLower()});
+        }
+    }
+
+    // Check for badge
+    auto *badges = getApp()->getSeventvBadges();
+    if (badges)
+    {
+        // Determine the user ID for badge assignment
+        // For Kick users, we use their Kick user ID as string
+        QString badgeUserId = visibleUserID;
+        if (badgeUserId.isEmpty())
+        {
+            // Fallback: use the 7TV user ID from the response
+            badgeUserId = user["id"].toString();
+        }
+
+        if (style.contains("badge") && style["badge"].isObject())
+        {
+            QJsonObject badgeJson = style["badge"].toObject();
+            QString badgeId = badgeJson["id"].toString();
+
+            if (!badgeId.isEmpty() && !badgeUserId.isEmpty())
+            {
+                // Register the badge definition
+                badges->registerBadge(badgeJson);
+
+                // Assign it to the user
+                badges->assignBadgeToUser(badgeId, UserId{badgeUserId});
+            }
+        }
+        else if (style.contains("badge_id") && !style["badge_id"].isNull())
+        {
+            // Only badge_id provided - fetch the badge definition via GraphQL
+            QString badgeId = style["badge_id"].toString();
+            if (!badgeId.isEmpty() && !badgeUserId.isEmpty())
+            {
+                // First try to assign if badge is already known
+                badges->assignBadgeToUser(badgeId, UserId{badgeUserId});
+
+                // Also fetch the badge definition in case it's not known yet
+                getApp()->getSeventvAPI()->getCosmetics(
+                    {badgeId},
+                    [badgeId, badgeUserId](const QJsonObject &response) {
+                        auto *app = tryGetApp();
+                        if (!app)
+                        {
+                            return;
+                        }
+
+                        auto *badges = app->getSeventvBadges();
+                        if (!badges)
+                        {
+                            return;
+                        }
+
+                        // Parse the GraphQL response
+                        // { "data": { "cosmetics": { "badges": [...] } } }
+                        auto data = response["data"].toObject();
+                        auto cosmetics = data["cosmetics"].toObject();
+                        auto badgesArray = cosmetics["badges"].toArray();
+
+                        for (const auto &badgeVal : badgesArray)
+                        {
+                            auto badgeJson = badgeVal.toObject();
+                            if (badgeJson["id"].toString() == badgeId)
+                            {
+                                // Register and assign the badge
+                                badges->registerBadge(badgeJson);
+                                badges->assignBadgeToUser(badgeId,
+                                                          UserId{badgeUserId});
+                                break;
+                            }
+                        }
+                    },
+                    [badgeId](const NetworkResult &) {
+                        qCDebug(chatterinoSeventv)
+                            << "Failed to fetch badge" << badgeId;
+                    });
+            }
+        }
     }
 }
 

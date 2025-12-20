@@ -21,6 +21,7 @@
 #include "providers/links/LinkInfo.hpp"
 #include "providers/links/LinkResolver.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
+#include "providers/kick/KickChannel.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/Resources.hpp"
@@ -1089,13 +1090,24 @@ void ChannelView::setChannel(const ChannelPtr &underlyingChannel)
     }
     this->queueUpdate();
 
-    // Notifications
+    // Notifications - Twitch live status
     auto *twitchChannel =
         dynamic_cast<TwitchChannel *>(underlyingChannel.get());
     if (twitchChannel != nullptr)
     {
         this->channelConnections_.managedConnect(
             twitchChannel->streamStatusChanged, [this]() {
+                this->liveStatusChanged.invoke();
+            });
+    }
+
+    // Notifications - Kick live status
+    auto *kickChannel =
+        dynamic_cast<KickChannel *>(underlyingChannel.get());
+    if (kickChannel != nullptr)
+    {
+        this->channelConnections_.managedConnect(
+            kickChannel->liveStatusChanged, [this]() {
                 this->liveStatusChanged.invoke();
             });
     }
