@@ -72,6 +72,17 @@ jobs:
           sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-18 42
           sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-18 42
 
+      - name: Install Qt WebSockets module
+        run: |
+          pip3 install aqtinstall
+          aqt install-qt linux desktop ${{ matrix.qt-version }} -m qtwebsockets --outputdir /tmp/qt-websockets
+          # Copy the WebSockets module to the existing Qt installation
+          sudo cp -r /tmp/qt-websockets/${{ matrix.qt-version }}/gcc_64/lib/cmake/Qt6WebSockets "$Qt6_DIR/lib/cmake/" || true
+          sudo cp -r /tmp/qt-websockets/${{ matrix.qt-version }}/gcc_64/lib/cmake/Qt6WebSocketsPrivate "$Qt6_DIR/lib/cmake/" || true
+          sudo cp /tmp/qt-websockets/${{ matrix.qt-version }}/gcc_64/lib/libQt6WebSockets* "$Qt6_DIR/lib/" || true
+          sudo cp -r /tmp/qt-websockets/${{ matrix.qt-version }}/gcc_64/include/QtWebSockets "$Qt6_DIR/include/" || true
+          sudo cp -r /tmp/qt-websockets/${{ matrix.qt-version }}/gcc_64/include/QtWebSocketsPrivate "$Qt6_DIR/include/" || true
+
       - name: Build
         env:
           KICK_CLIENT_ID: ${{ secrets.KICK_CLIENT_ID }}
