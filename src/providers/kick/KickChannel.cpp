@@ -858,14 +858,22 @@ QString KickChannel::convertEmotesForSending(const QString &message) const
         channelEmotes = this->nativeKickEmotes_;
     }
 
+    // Get available Kick emotes (from API, filtered by access)
+    std::shared_ptr<const EmoteMap> availableEmotes;
+    {
+        std::shared_lock lock(this->availableEmotesMutex_);
+        availableEmotes = this->availableKickEmotes_;
+    }
+
     // Get global Kick emotes
     auto globalEmotes = getApp()->getKickEmotes()->globalEmotes();
 
     // If no emotes available at all, return unchanged
     bool hasChannelEmotes = channelEmotes && !channelEmotes->empty();
+    bool hasAvailableEmotes = availableEmotes && !availableEmotes->empty();
     bool hasGlobalEmotes = globalEmotes && !globalEmotes->empty();
 
-    if (!hasChannelEmotes && !hasGlobalEmotes)
+    if (!hasChannelEmotes && !hasAvailableEmotes && !hasGlobalEmotes)
     {
         return message;
     }
@@ -877,7 +885,7 @@ QString KickChannel::convertEmotesForSending(const QString &message) const
         const QString &word = words[i];
         EmotePtr foundEmote = nullptr;
 
-        // First check channel emotes
+        // First check native channel emotes (accumulated from messages)
         if (hasChannelEmotes)
         {
             auto it = channelEmotes->find(EmoteName{word});
@@ -887,7 +895,17 @@ QString KickChannel::convertEmotesForSending(const QString &message) const
             }
         }
 
-        // Then check global emotes if not found in channel
+        // Then check available emotes (from API)
+        if (!foundEmote && hasAvailableEmotes)
+        {
+            auto it = availableEmotes->find(EmoteName{word});
+            if (it != availableEmotes->end())
+            {
+                foundEmote = it->second;
+            }
+        }
+
+        // Then check global emotes if not found
         if (!foundEmote && hasGlobalEmotes)
         {
             auto it = globalEmotes->find(EmoteName{word});
