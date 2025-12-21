@@ -274,13 +274,62 @@ void SeventvPaints::loadUserCosmetics(const QJsonObject &userJson,
     }
     else if (style.contains("paint_id") && !style["paint_id"].isNull())
     {
-        // Sometimes only paint_id is provided without the full paint object
-        // In this case, we can't create the paint, but if we've seen it before
-        // from another user, we can assign it
+        // Only paint_id is provided without the full paint object
+        // We need to fetch the paint definition via GraphQL cosmetics endpoint
         QString paintId = style["paint_id"].toString();
         if (!paintId.isEmpty())
         {
-            this->assignPaintToUser(paintId, UserName{userName.toLower()});
+            QString userNameLower = userName.toLower();
+
+            // First try to assign if paint is already known
+            this->assignPaintToUser(paintId, UserName{userNameLower});
+
+            // Check if we already have this paint
+            {
+                std::shared_lock lock(this->mutex_);
+                auto it = this->knownPaints_.find(paintId);
+                if (it != this->knownPaints_.end())
+                {
+                    // Already have it, assignment above is sufficient
+                    return;
+                }
+            }
+
+            // Fetch the paint definition via GraphQL
+            qCDebug(chatterinoSeventv)
+                << "Fetching paint" << paintId << "for user" << userName;
+
+            getApp()->getSeventvAPI()->getCosmetics(
+                {paintId},
+                [this, paintId, userNameLower](const QJsonObject &response) {
+                    // Response structure: { data: { cosmetics: { paints: [...] } } }
+                    QJsonObject data = response["data"].toObject();
+                    QJsonArray paints =
+                        data["cosmetics"].toObject()["paints"].toArray();
+
+                    for (const auto &paintVal : paints)
+                    {
+                        QJsonObject paintJson = paintVal.toObject();
+                        if (paintJson["id"].toString() == paintId)
+                        {
+                            // Add the paint definition
+                            this->addPaint(paintJson);
+
+                            // Re-assign to the user now that we have the paint
+                            this->assignPaintToUser(paintId,
+                                                    UserName{userNameLower});
+
+                            qCDebug(chatterinoSeventv)
+                                << "Loaded paint" << paintId << "for user"
+                                << userNameLower;
+                            break;
+                        }
+                    }
+                },
+                [paintId](const auto &) {
+                    qCDebug(chatterinoSeventv)
+                        << "Failed to fetch paint" << paintId;
+                });
         }
     }
 

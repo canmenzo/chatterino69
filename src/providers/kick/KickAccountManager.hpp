@@ -55,6 +55,9 @@ public:
     /// Signal emitted when login succeeds
     pajlada::Signals::Signal<std::shared_ptr<KickAccount>> loginSucceeded;
 
+    /// Signal emitted when authentication expires (token refresh failed)
+    pajlada::Signals::NoArgSignal authenticationExpired;
+
     SignalVector<std::shared_ptr<KickAccount>> accounts;
 
 private:
@@ -100,4 +103,3 @@ private:
 };
 
 }  // namespace chatterino
-

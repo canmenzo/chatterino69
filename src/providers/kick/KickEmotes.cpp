@@ -2,6 +2,7 @@
 
 #include "common/QLogging.hpp"
 #include "messages/Emote.hpp"
+#include "messages/Image.hpp"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -9,6 +10,13 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+
+namespace {
+
+// Base emote size matching Twitch's system (28x28 pixels)
+constexpr QSize KICK_EMOTE_BASE_SIZE(28, 28);
+
+}  // namespace
 
 namespace chatterino {
 
@@ -33,17 +41,105 @@ EmotePtr KickEmotes::getEmote(const QString &emoteName) const
 
 void KickEmotes::loadGlobalEmotes(std::function<void(bool success)> callback)
 {
-    // TODO: Kick doesn't have a documented global emotes API
-    // This is a placeholder for when/if one becomes available
-    // For now, rely on 7TV/BTTV/FFZ global emotes which work in Kick channels
+    // Global Kick emotes are available at https://kick.com/emotes/global
+    // Response: [{ ..., "emotes": [{ "id": int, "name": string, "subscribers_only": bool }] }]
 
-    qCDebug(chatterinoKick) << "Kick global emotes: using 7TV/BTTV/FFZ "
-                               "providers for emote support";
+    qCDebug(chatterinoKick) << "Loading global Kick emotes...";
 
-    if (callback)
-    {
-        callback(true);
-    }
+    auto *manager = new QNetworkAccessManager();
+    QNetworkRequest request{QUrl{"https://kick.com/emotes/global"}};
+    request.setHeader(QNetworkRequest::UserAgentHeader,
+                      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                      "AppleWebKit/537.36 (KHTML, like Gecko) "
+                      "Chrome/120.0.0.0 Safari/537.36");
+    request.setRawHeader("Accept", "application/json");
+
+    QNetworkReply *reply = manager->get(request);
+
+    QObject::connect(
+        reply, &QNetworkReply::finished, [this, reply, manager, callback]() {
+            reply->deleteLater();
+            manager->deleteLater();
+
+            if (reply->error() != QNetworkReply::NoError)
+            {
+                qCWarning(chatterinoKick)
+                    << "Failed to load global Kick emotes:" << reply->errorString();
+                if (callback)
+                {
+                    callback(false);
+                }
+                return;
+            }
+
+            QByteArray data = reply->readAll();
+            QJsonDocument doc = QJsonDocument::fromJson(data);
+
+            if (!doc.isArray())
+            {
+                qCWarning(chatterinoKick)
+                    << "Invalid global emotes response - expected array";
+                if (callback)
+                {
+                    callback(false);
+                }
+                return;
+            }
+
+            auto newEmotes = std::make_shared<EmoteMap>();
+            QJsonArray channelArray = doc.array();
+
+            // Response is array of channel objects, each with "emotes" array
+            for (const auto &channelVal : channelArray)
+            {
+                QJsonObject channelObj = channelVal.toObject();
+                QJsonArray emotesArray = channelObj["emotes"].toArray();
+
+                for (const auto &emoteVal : emotesArray)
+                {
+                    QJsonObject emoteObj = emoteVal.toObject();
+                    int id = emoteObj["id"].toInt();
+                    QString name = emoteObj["name"].toString();
+                    bool subscribersOnly = emoteObj["subscribers_only"].toBool();
+
+                    // Skip subscriber-only global emotes
+                    if (subscribersOnly)
+                    {
+                        continue;
+                    }
+
+                    if (name.isEmpty() || id == 0)
+                    {
+                        continue;
+                    }
+
+                    // Create emote URL
+                    QString url = QString("https://files.kick.com/emotes/%1/fullsize")
+                                      .arg(id);
+
+                    // Create emote
+                    auto emote = std::make_shared<Emote>(Emote{
+                        EmoteName{name},
+                        ImageSet{Image::fromUrl({url}, 1.0, KICK_EMOTE_BASE_SIZE)},
+                        Tooltip{QString("%1<br>Global Kick Emote").arg(name)},
+                        Url{url},
+                        false,  // Not zero-width
+                        EmoteId{QString::number(id)},
+                    });
+
+                    newEmotes->emplace(EmoteName{name}, emote);
+                }
+            }
+
+            this->globalEmotes_ = newEmotes;
+            qCDebug(chatterinoKick)
+                << "Loaded" << newEmotes->size() << "global Kick emotes";
+
+            if (callback)
+            {
+                callback(true);
+            }
+        });
 }
 
 void KickEmotes::loadChannelEmotes(const QString &channelSlug,
@@ -69,6 +165,11 @@ const EmoteMap &KickEmotes::getGlobalEmotes() const
 {
     static EmoteMap empty;
     return this->globalEmotes_ ? *this->globalEmotes_ : empty;
+}
+
+std::shared_ptr<const EmoteMap> KickEmotes::globalEmotes() const
+{
+    return this->globalEmotes_;
 }
 
 std::shared_ptr<const EmoteMap> KickEmotes::getChannelEmotes(
@@ -124,10 +225,12 @@ void KickEmotes::parseEmoteData(const QByteArray &data, EmoteMap &emoteMap)
         EmoteId emoteId{id};
         EmoteName emoteName{name};
 
+        // Create ImageSet with single image - Kick provides one high-res image
+        // The system will scale it as needed for different display densities
         auto emote = std::make_shared<Emote>(Emote{
             emoteName,
-            ImageSet{Url{url}},
-            Tooltip{name},
+            ImageSet{Image::fromUrl({url}, 1.0, KICK_EMOTE_BASE_SIZE)},
+            Tooltip{name + "<br>Kick Emote"},
             Url{url},
             false,  // Not zero-width
             emoteId,

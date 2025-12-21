@@ -57,7 +57,57 @@ public:
         : SignalLabel()
     {
         this->setText(text);
+        // Prevent focus acquisition to avoid persistent blue highlight on macOS
+        this->setFocusPolicy(Qt::NoFocus);
+        // Disable native focus rect and ensure no persistent selection styling
+        this->setAttribute(Qt::WA_MacShowFocusRect, false);
+        // Ensure no hover/selection persistence
+        this->setAttribute(Qt::WA_Hover, false);
     }
+
+    void setActive(bool active)
+    {
+        this->isActive_ = active;
+        this->updateStyle();
+    }
+
+protected:
+    void enterEvent(QEnterEvent *event) override
+    {
+        SignalLabel::enterEvent(event);
+        this->isHovered_ = true;
+        this->updateStyle();
+    }
+
+    void leaveEvent(QEvent *event) override
+    {
+        SignalLabel::leaveEvent(event);
+        this->isHovered_ = false;
+        this->updateStyle();
+    }
+
+private:
+    void updateStyle()
+    {
+        if (this->isActive_)
+        {
+            // Active/selected item - cyan text
+            this->setStyleSheet("color: #00ABF4; background: transparent;");
+        }
+        else if (this->isHovered_)
+        {
+            // Hovered item - slightly lighter
+            this->setStyleSheet("color: #AAAAAA; background: transparent;");
+        }
+        else
+        {
+            // Default - inherit theme color
+            this->setStyleSheet("background: transparent;");
+        }
+    }
+
+    bool isActive_ = false;
+    bool isHovered_ = false;
 };
 
 class DescriptionLabel : public QLabel

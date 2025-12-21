@@ -39,8 +39,11 @@ public:
     void loadChannelEmotes(const QString &channelSlug,
                            std::function<void(bool success)> callback);
 
-    /// Get all loaded global emotes
+    /// Get all loaded global emotes (reference)
     [[nodiscard]] const EmoteMap &getGlobalEmotes() const;
+
+    /// Get all loaded global emotes (shared_ptr for consistency with other providers)
+    [[nodiscard]] std::shared_ptr<const EmoteMap> globalEmotes() const;
 
     /// Get channel emotes for a specific channel
     /// @param channelSlug The channel slug

@@ -7,6 +7,8 @@
 #include "providers/bttv/BttvEmotes.hpp"
 #include "providers/emoji/Emojis.hpp"
 #include "providers/ffz/FfzEmotes.hpp"
+#include "providers/kick/KickChannel.hpp"
+#include "providers/kick/KickEmotes.hpp"
 #include "providers/seventv/SeventvEmotes.hpp"
 #include "providers/seventv/SeventvPersonalEmotes.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
@@ -93,6 +95,8 @@ void EmoteSource::initializeFromChannel(const Channel *channel)
 
     std::vector<EmoteItem> emotes;
     const auto *tc = dynamic_cast<const TwitchChannel *>(channel);
+    const auto *kc = dynamic_cast<const KickChannel *>(channel);
+
     // returns true also for special Twitch channels (/live, /mentions, /whispers, etc.)
     if (channel->isTwitchChannel())
     {
@@ -141,7 +145,44 @@ void EmoteSource::initializeFromChannel(const Channel *channel)
             addEmotes(emotes, *seventvG, "Global 7TV");
         }
     }
+    // Handle Kick channels - include native Kick emotes (filtered by access),
+    // 7TV, BTTV, FFZ emotes
+    else if (channel->getType() == Channel::Type::Kick && kc)
+    {
+        // Add available native Kick emotes (filtered by user's subscription status)
+        if (auto kickEmotes = kc->getAvailableKickEmotes())
+        {
+            addEmotes(emotes, *kickEmotes, "Kick Channel");
+        }
 
+        // Add channel-specific 7TV emotes for Kick
+        if (auto seventv = kc->getSeventvEmotes())
+        {
+            addEmotes(emotes, *seventv, "Channel 7TV");
+        }
+
+        // Add global third-party emotes (cross-platform compatible)
+        if (auto bttvG = app->getBttvEmotes()->emotes())
+        {
+            addEmotes(emotes, *bttvG, "Global BetterTTV");
+        }
+        if (auto ffzG = app->getFfzEmotes()->emotes())
+        {
+            addEmotes(emotes, *ffzG, "Global FrankerFaceZ");
+        }
+        if (auto seventvG = app->getSeventvEmotes()->globalEmotes())
+        {
+            addEmotes(emotes, *seventvG, "Global 7TV");
+        }
+
+        // Add global Kick emotes
+        if (auto kickG = app->getKickEmotes()->globalEmotes())
+        {
+            addEmotes(emotes, *kickG, "Global Kick");
+        }
+    }
+
+    // Always add emojis for all channel types
     addEmojis(emotes, app->getEmotes()->getEmojis()->getEmojis());
 
     this->items_ = std::move(emotes);

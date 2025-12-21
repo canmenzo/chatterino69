@@ -132,9 +132,19 @@ TitleLabel *GeneralPageView::addTitle(const QString &title)
         this->navigationLayout_->addWidget(navLabel);
 
         QObject::connect(
-            navLabel, &NavigationLabel::leftMouseUp, label, [this, label] {
+            navLabel, &NavigationLabel::leftMouseUp, label,
+            [this, label, navLabel] {
+                // Clear any focus from clicked navigation items
+                navLabel->clearFocus();
+
+                // Scroll to the section
                 this->contentScrollArea_->verticalScrollBar()->setValue(
                     label->y());
+
+                // Explicitly update highlighting after click to ensure
+                // immediate visual feedback (fixes persistent blue highlighting
+                // bug)
+                this->updateNavigationHighlighting();
             });
     }
 
@@ -345,15 +355,21 @@ void GeneralPageView::updateNavigationHighlighting()
 
     for (auto &&group : this->groups_)
     {
+        auto *navLabel = qobject_cast<NavigationLabel *>(group.navigationLink);
+        if (navLabel == nullptr)
+        {
+            continue;
+        }
+
         if (first && (group.title->geometry().bottom() > scrollY ||
                       &group == &this->groups_.back()))
         {
             first = false;
-            group.navigationLink->setStyleSheet("color: #00ABF4");
+            navLabel->setActive(true);
         }
         else
         {
-            group.navigationLink->setStyleSheet("");
+            navLabel->setActive(false);
         }
     }
 }

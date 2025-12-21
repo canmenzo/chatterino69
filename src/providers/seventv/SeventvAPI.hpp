@@ -1,11 +1,14 @@
 #pragma once
 
 #include <functional>
+#include <mutex>
+#include <optional>
+#include <shared_mutex>
+#include <unordered_map>
 
+#include <QJsonObject>
+#include <QString>
 #include <QStringList>
-
-class QString;
-class QJsonObject;
 
 namespace chatterino {
 
@@ -30,9 +33,10 @@ public:
                            SuccessCallback<const QJsonObject &> &&onSuccess,
                            ErrorCallback &&onError);
 
-    /// Get 7TV user by Kick user ID
+    /// Get 7TV user by Kick user ID (cached)
     /// Uses https://7tv.io/v3/users/KICK/{user_id}
     /// Note: Returns a "connection" object, not full user profile
+    /// Caches both successful results and 404s to avoid duplicate requests
     void getUserByKickID(const QString &kickUserID,
                          SuccessCallback<const QJsonObject &> &&onSuccess,
                          ErrorCallback &&onError);
@@ -56,6 +60,18 @@ public:
     void updatePresence(const QString &twitchChannelID,
                         const QString &seventvUserID,
                         SuccessCallback<> &&onSuccess, ErrorCallback &&onError);
+
+private:
+    /// Cache for Kick user ID -> 7TV connection object
+    /// std::nullopt means the user was not found (404)
+    /// QJsonObject contains the connection data if found
+    struct KickUserCacheEntry
+    {
+        std::optional<QJsonObject> data;  // nullopt = 404/not found
+        bool pending = false;             // Request is in flight
+    };
+    mutable std::shared_mutex kickUserCacheMutex_;
+    std::unordered_map<QString, KickUserCacheEntry> kickUserCache_;
 };
 
 }  // namespace chatterino

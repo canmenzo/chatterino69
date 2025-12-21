@@ -4,15 +4,17 @@
 
 #include <QCryptographicHash>
 #include <QDesktopServices>
-#include <QTimer>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QRandomGenerator>
 #include <QTcpSocket>
+#include <QTimer>
 #include <QUrl>
 #include <QUrlQuery>
+
+#include <array>
 
 namespace chatterino {
 
@@ -95,15 +97,15 @@ void KickOAuthFlow::generatePKCE()
     // Generate code challenge (SHA256 hash, base64url encoded)
     QByteArray hash = QCryptographicHash::hash(this->codeVerifier_.toUtf8(),
                                                QCryptographicHash::Sha256);
-    this->codeChallenge_ =
-        hash.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
+    this->codeChallenge_ = hash.toBase64(QByteArray::Base64UrlEncoding |
+                                         QByteArray::OmitTrailingEquals);
 
     // Generate random state for CSRF protection
     QByteArray stateBytes(32, 0);
     QRandomGenerator::global()->fillRange(
         reinterpret_cast<quint32 *>(stateBytes.data()), 8);
-    this->state_ =
-        stateBytes.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
+    this->state_ = stateBytes.toBase64(QByteArray::Base64UrlEncoding |
+                                       QByteArray::OmitTrailingEquals);
 
     qCDebug(chatterinoKick) << "Generated PKCE code verifier and challenge";
 }
@@ -133,7 +135,7 @@ QString KickOAuthFlow::buildAuthorizationUrl() const
     query.addQueryItem("response_type", "code");
     query.addQueryItem("client_id", clientId);
     query.addQueryItem("redirect_uri", REDIRECT_URI);
-    query.addQueryItem("scope", "chat:write user:read");
+    query.addQueryItem("scope", "chat:write user:read channel:read");
     query.addQueryItem("state", this->state_);
     query.addQueryItem("code_challenge", this->codeChallenge_);
     query.addQueryItem("code_challenge_method", "S256");
@@ -149,18 +151,42 @@ bool KickOAuthFlow::startLocalServer()
     QObject::connect(this->localServer_.get(), &QTcpServer::newConnection, this,
                      &KickOAuthFlow::onNewConnection);
 
-    if (!this->localServer_->listen(QHostAddress::LocalHost,
-                                    LOCAL_SERVER_PORT))
+    // Try the default port first
+    if (this->localServer_->listen(QHostAddress::LocalHost, LOCAL_SERVER_PORT))
     {
-        qCWarning(chatterinoKick)
-            << "Failed to start local server:"
-            << this->localServer_->errorString();
-        return false;
+        qCDebug(chatterinoKick)
+            << "OAuth callback server listening on port" << LOCAL_SERVER_PORT;
+        return true;
     }
 
-    qCDebug(chatterinoKick)
-        << "OAuth callback server listening on port" << LOCAL_SERVER_PORT;
-    return true;
+    // Port conflict - try alternative ports
+    qCWarning(chatterinoKick)
+        << "Port" << LOCAL_SERVER_PORT
+        << "is busy:" << this->localServer_->errorString();
+
+    // Try a few alternative ports
+    static const std::array<quint16, 3> alternativePorts = {9001, 9002, 9003};
+
+    for (quint16 port : alternativePorts)
+    {
+        if (this->localServer_->listen(QHostAddress::LocalHost, port))
+        {
+            qCDebug(chatterinoKick)
+                << "OAuth callback server listening on alternative port"
+                << port;
+            // Note: The redirect URI must match what's registered with Kick
+            // If using a different port, the OAuth will fail unless Kick allows it
+            qCWarning(chatterinoKick)
+                << "Using alternative port may cause OAuth to fail if not "
+                   "registered with Kick";
+            return true;
+        }
+    }
+
+    qCWarning(chatterinoKick)
+        << "Failed to start local server on any port. Another instance of "
+           "Chatterino may be running, or ports are blocked by firewall.";
+    return false;
 }
 
 void KickOAuthFlow::stopLocalServer()
@@ -175,7 +201,17 @@ void KickOAuthFlow::stopLocalServer()
 bool KickOAuthFlow::openBrowser(const QString &url)
 {
     qCDebug(chatterinoKick) << "Opening browser for OAuth:" << url;
-    return QDesktopServices::openUrl(QUrl(url));
+
+    bool opened = QDesktopServices::openUrl(QUrl(url));
+
+    if (!opened)
+    {
+        qCWarning(chatterinoKick)
+            << "Failed to open browser automatically. Please manually visit: "
+            << url;
+    }
+
+    return opened;
 }
 
 void KickOAuthFlow::onNewConnection()
@@ -271,9 +307,9 @@ std::optional<QString> KickOAuthFlow::parseCallbackCode(
 
     if (state != this->state_)
     {
-        qCWarning(chatterinoKick) << "State mismatch in OAuth callback"
-                                  << "received:" << state
-                                  << "expected:" << this->state_;
+        qCWarning(chatterinoKick)
+            << "State mismatch in OAuth callback"
+            << "received:" << state << "expected:" << this->state_;
         return std::nullopt;
     }
 
@@ -281,9 +317,8 @@ std::optional<QString> KickOAuthFlow::parseCallbackCode(
     QString error = query.queryItemValue("error");
     if (!error.isEmpty())
     {
-        qCWarning(chatterinoKick)
-            << "OAuth error:" << error
-            << query.queryItemValue("error_description");
+        qCWarning(chatterinoKick) << "OAuth error:" << error
+                                  << query.queryItemValue("error_description");
         return std::nullopt;
     }
 
@@ -339,17 +374,16 @@ void KickOAuthFlow::sendResponse(QTcpSocket *socket, int statusCode,
                        .arg(statusCode == 200 ? "✓ Success" : "✗ Error")
                        .arg(message);
 
-    QString response =
-        QString("HTTP/1.1 %1 %2\r\n"
-                "Content-Type: text/html; charset=utf-8\r\n"
-                "Content-Length: %3\r\n"
-                "Connection: close\r\n"
-                "\r\n"
-                "%4")
-            .arg(statusCode)
-            .arg(statusText)
-            .arg(html.toUtf8().size())
-            .arg(html);
+    QString response = QString("HTTP/1.1 %1 %2\r\n"
+                               "Content-Type: text/html; charset=utf-8\r\n"
+                               "Content-Length: %3\r\n"
+                               "Connection: close\r\n"
+                               "\r\n"
+                               "%4")
+                           .arg(statusCode)
+                           .arg(statusText)
+                           .arg(html.toUtf8().size())
+                           .arg(html);
 
     socket->write(response.toUtf8());
     socket->flush();
@@ -363,7 +397,7 @@ void KickOAuthFlow::exchangeCodeForTokens(const QString &code)
     // Get client credentials: compile-time define > environment variable
     QString clientId;
     QString clientSecret;
-    
+
 #ifdef CHATTERINO_KICK_CLIENT_ID
     clientId = QStringLiteral(CHATTERINO_KICK_CLIENT_ID);
 #endif
@@ -371,13 +405,14 @@ void KickOAuthFlow::exchangeCodeForTokens(const QString &code)
     {
         clientId = qEnvironmentVariable("CHATTERINO_KICK_CLIENT_ID", "");
     }
-    
+
 #ifdef CHATTERINO_KICK_CLIENT_SECRET
     clientSecret = QStringLiteral(CHATTERINO_KICK_CLIENT_SECRET);
 #endif
     if (clientSecret.isEmpty())
     {
-        clientSecret = qEnvironmentVariable("CHATTERINO_KICK_CLIENT_SECRET", "");
+        clientSecret =
+            qEnvironmentVariable("CHATTERINO_KICK_CLIENT_SECRET", "");
     }
 
     if (clientId.isEmpty())
@@ -385,7 +420,8 @@ void KickOAuthFlow::exchangeCodeForTokens(const QString &code)
         qCWarning(chatterinoKick)
             << "No Kick Client ID configured. Token exchange will fail.";
         this->authenticationFailed.invoke(
-            "Missing Kick Client ID - rebuild with credentials or set environment variable");
+            "Missing Kick Client ID - rebuild with credentials or set "
+            "environment variable");
         this->cancel();
         return;
     }
@@ -411,65 +447,79 @@ void KickOAuthFlow::exchangeCodeForTokens(const QString &code)
     QNetworkReply *reply =
         manager->post(request, postData.toString(QUrl::FullyEncoded).toUtf8());
 
-    QObject::connect(reply, &QNetworkReply::finished, this, [this, reply, manager] {
-        reply->deleteLater();
-        manager->deleteLater();
+    QObject::connect(
+        reply, &QNetworkReply::finished, this, [this, reply, manager] {
+            reply->deleteLater();
+            manager->deleteLater();
 
-        if (reply->error() != QNetworkReply::NoError)
-        {
-            qCWarning(chatterinoKick)
-                << "Token exchange failed:" << reply->errorString();
-            this->authenticationFailed.invoke(
-                QString("Token exchange failed: %1").arg(reply->errorString()));
-            this->cancel();
-            return;
-        }
+            if (reply->error() != QNetworkReply::NoError)
+            {
+                qCWarning(chatterinoKick)
+                    << "Token exchange failed:" << reply->errorString();
+                this->authenticationFailed.invoke(
+                    QString("Token exchange failed: %1")
+                        .arg(reply->errorString()));
+                this->cancel();
+                return;
+            }
 
-        QByteArray responseData = reply->readAll();
-        QJsonDocument doc = QJsonDocument::fromJson(responseData);
+            QByteArray responseData = reply->readAll();
+            QJsonDocument doc = QJsonDocument::fromJson(responseData);
 
-        if (!doc.isObject())
-        {
-            this->authenticationFailed.invoke("Invalid token response");
-            this->cancel();
-            return;
-        }
+            if (!doc.isObject())
+            {
+                this->authenticationFailed.invoke("Invalid token response");
+                this->cancel();
+                return;
+            }
 
-        QJsonObject obj = doc.object();
+            QJsonObject obj = doc.object();
 
-        // Check for error response
-        if (obj.contains("error"))
-        {
-            QString error = obj["error"].toString();
-            QString description = obj["error_description"].toString();
-            this->authenticationFailed.invoke(
-                QString("OAuth error: %1 - %2").arg(error, description));
-            this->cancel();
-            return;
-        }
+            // Check for error response
+            if (obj.contains("error"))
+            {
+                QString error = obj["error"].toString();
+                QString description = obj["error_description"].toString();
+                this->authenticationFailed.invoke(
+                    QString("OAuth error: %1 - %2").arg(error, description));
+                this->cancel();
+                return;
+            }
 
-        // Extract tokens
-        Tokens tokens;
-        tokens.accessToken = obj["access_token"].toString();
-        tokens.refreshToken = obj["refresh_token"].toString();
-        tokens.scope = obj["scope"].toString();
+            // Extract tokens
+            Tokens tokens;
+            tokens.accessToken = obj["access_token"].toString();
+            tokens.refreshToken = obj["refresh_token"].toString();
+            tokens.scope = obj["scope"].toString();
 
-        int expiresIn = obj["expires_in"].toInt(3600);
-        tokens.expiresAt = QDateTime::currentDateTime().addSecs(expiresIn);
+            int expiresIn = obj["expires_in"].toInt(3600);
+            tokens.expiresAt = QDateTime::currentDateTime().addSecs(expiresIn);
 
-        if (tokens.accessToken.isEmpty())
-        {
-            this->authenticationFailed.invoke("No access token in response");
-            this->cancel();
-            return;
-        }
+            if (tokens.accessToken.isEmpty())
+            {
+                this->authenticationFailed.invoke(
+                    "No access token in response");
+                this->cancel();
+                return;
+            }
 
-        qCDebug(chatterinoKick) << "Successfully obtained tokens";
-        this->isInProgress_ = false;
-        this->stopLocalServer();
-        this->authenticationSuccess.invoke(tokens);
-    });
+            qCDebug(chatterinoKick) << "Successfully obtained tokens";
+            qCDebug(chatterinoKick)
+                << "Granted scopes:" << tokens.scope
+                << "| Requested: chat:write user:read channel:read";
+
+            // Warn if chat:write scope wasn't granted
+            if (!tokens.scope.contains("chat:write"))
+            {
+                qCWarning(chatterinoKick)
+                    << "WARNING: chat:write scope not granted! "
+                    << "Ensure this scope is enabled in your Kick developer "
+                       "app settings.";
+            }
+            this->isInProgress_ = false;
+            this->stopLocalServer();
+            this->authenticationSuccess.invoke(tokens);
+        });
 }
 
 }  // namespace chatterino
-

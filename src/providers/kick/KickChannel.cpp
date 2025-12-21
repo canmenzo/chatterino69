@@ -13,6 +13,7 @@
 #include "providers/ffz/FfzEmotes.hpp"
 #include "providers/kick/KickAccount.hpp"
 #include "providers/kick/KickApi.hpp"
+#include "providers/kick/KickEmotes.hpp"
 #include "providers/kick/KickWebSocket.hpp"
 #include "providers/seventv/SeventvAPI.hpp"
 #include "providers/seventv/SeventvBadges.hpp"
@@ -20,8 +21,9 @@
 #include "providers/seventv/SeventvPaints.hpp"
 #include "singletons/Settings.hpp"
 
+#include <QFile>
+#include <QRandomGenerator>
 #include <QRegularExpression>
-
 #include <QTimer>
 
 #include <algorithm>
@@ -32,6 +34,8 @@ KickChannel::KickChannel(const QString &channelSlug)
     : Channel(channelSlug, Channel::Type::Kick)
     , channelSlug_(channelSlug)
     , connectionState_(KickConnectionState::Disconnected)
+    , nativeKickEmotes_(std::make_shared<EmoteMap>())
+    , availableKickEmotes_(std::make_shared<EmoteMap>())
 {
 }
 
@@ -42,28 +46,59 @@ KickChannel::~KickChannel()
 
 void KickChannel::sendMessage(const QString &message)
 {
+    // Check for empty message (matches Twitch behavior)
+    if (message.trimmed().isEmpty())
+    {
+        this->addSystemMessage(translateKickError(KickError::MissingText));
+        return;
+    }
+
+    // Check for message length (Kick limit is 500 characters)
+    if (message.length() > 500)
+    {
+        this->addSystemMessage(translateKickError(KickError::MessageTooLong));
+        return;
+    }
+
     if (!this->canSendMessage())
     {
-        this->addSystemMessage("Cannot send message: not authenticated or "
-                               "channel not connected");
+        if (!this->isAuthenticated_)
+        {
+            this->addSystemMessage(
+                translateKickError(KickError::UserMissingScope));
+        }
+        else if (this->connectionState_ != KickConnectionState::Connected)
+        {
+            this->addSystemMessage(
+                translateKickError(KickError::ConnectionFailed));
+        }
+        else
+        {
+            this->addSystemMessage(
+                "Cannot send message: channel not ready. Please wait.");
+        }
         return;
     }
 
     if (!this->api_)
     {
-        this->addSystemMessage("Cannot send message: API not initialized");
+        this->addSystemMessage(
+            "Cannot send message: API not initialized. Try reconnecting.");
         return;
     }
 
     if (this->broadcasterUserId_ == 0)
     {
-        this->addSystemMessage("Cannot send message: channel not resolved");
+        this->addSystemMessage(translateKickError(KickError::ChannelNotFound));
         return;
     }
 
+    // Convert native Kick emote names to [emote:ID:NAME] format
+    QString processedMessage = this->convertEmotesForSending(message);
+
     // Send via KickApi using broadcaster_user_id (per Context7 docs)
     this->api_->sendMessage(
-        this->broadcasterUserId_, message,
+        this->broadcasterUserId_, processedMessage,
         [this, message](KickApiResult result) {
             if (result.success)
             {
@@ -74,21 +109,10 @@ void KickChannel::sendMessage(const QString &message)
             }
             else
             {
-                // Show error
-                this->addSystemMessage(
-                    QString("Failed to send message: %1").arg(result.errorMessage));
-
-                // Check for rate limit
-                if (result.rateLimit.has_value() &&
-                    result.rateLimit->remaining <= 0)
-                {
-                    int secondsUntilReset =
-                        QDateTime::currentDateTime().secsTo(
-                            result.rateLimit->resetAt);
-                    this->addSystemMessage(
-                        QString("Rate limited. Try again in %1 seconds.")
-                            .arg(secondsUntilReset));
-                }
+                // Show the already-translated error message from KickApi
+                // (No need to add "Failed to send message:" prefix - the
+                // translated message is already user-friendly)
+                this->addSystemMessage(result.errorMessage);
             }
         });
 }
@@ -118,8 +142,8 @@ void KickChannel::setApi(std::shared_ptr<KickApi> api)
 void KickChannel::setAccount(std::shared_ptr<KickAccount> account)
 {
     this->account_ = std::move(account);
-    this->isAuthenticated_ = (this->account_ != nullptr &&
-                              this->account_->isAuthenticated());
+    this->isAuthenticated_ =
+        (this->account_ != nullptr && this->account_->isAuthenticated());
 }
 
 void KickChannel::connect()
@@ -165,9 +189,10 @@ void KickChannel::connect()
                 }
             });
 
-        std::ignore = this->webSocket_->errorOccurred.connect(
-            [this](const QString &error) {
-                this->addSystemMessage(QString("Kick error: %1").arg(error));
+        std::ignore =
+            this->webSocket_->errorOccurred.connect([this](const QString &) {
+                this->addSystemMessage(
+                    translateKickError(KickError::ConnectionFailed));
                 this->handleConnectionError();
             });
     }
@@ -176,7 +201,7 @@ void KickChannel::connect()
     if (!this->webSocket_->connect())
     {
         this->setConnectionState(KickConnectionState::Failed);
-        this->addSystemMessage("Failed to initiate Kick WebSocket connection");
+        this->addSystemMessage(translateKickError(KickError::ConnectionFailed));
     }
 }
 
@@ -245,11 +270,17 @@ void KickChannel::fetchRecentMessages()
         "for Kick channels.");
 }
 
-void KickChannel::refreshSevenTVChannelEmotes()
+void KickChannel::refreshSevenTVChannelEmotes(bool manualRefresh)
 {
     if (this->broadcasterUserId_ == 0)
     {
-        qCDebug(chatterinoKick) << "Cannot load 7TV emotes: broadcaster ID not resolved";
+        qCDebug(chatterinoKick)
+            << "Cannot load 7TV emotes: broadcaster ID not resolved";
+        if (manualRefresh)
+        {
+            this->addSystemMessage(
+                "Cannot reload 7TV emotes: channel not fully connected.");
+        }
         return;
     }
 
@@ -260,13 +291,14 @@ void KickChannel::refreshSevenTVChannelEmotes()
         return;
     }
 
-    qCDebug(chatterinoKick) << "Loading 7TV emotes for Kick channel"
-                           << this->channelSlug_ << "user ID:" << this->broadcasterUserId_;
+    qCDebug(chatterinoKick)
+        << "Loading 7TV emotes for Kick channel" << this->channelSlug_
+        << "user ID:" << this->broadcasterUserId_;
 
     // Use Kick-specific 7TV endpoint: https://7tv.io/v3/users/KICK/{user_id}
     seventv->getUserByKickID(
         QString::number(this->broadcasterUserId_),
-        [this](const QJsonObject &json) {
+        [this, manualRefresh](const QJsonObject &json) {
             const auto emoteSet = json["emote_set"].toObject();
             const auto parsedEmotes = emoteSet["emotes"].toArray();
 
@@ -275,27 +307,205 @@ void KickChannel::refreshSevenTVChannelEmotes()
 
             if (!emoteMap.empty())
             {
-                this->seventvEmotes_ = std::make_shared<const EmoteMap>(emoteMap);
+                this->seventvEmotes_ =
+                    std::make_shared<const EmoteMap>(emoteMap);
                 qCDebug(chatterinoKick)
-                    << "Loaded" << emoteMap.size() << "7TV emotes for Kick channel"
-                    << this->channelSlug_;
+                    << "Loaded" << emoteMap.size()
+                    << "7TV emotes for Kick channel" << this->channelSlug_;
+
+                if (manualRefresh)
+                {
+                    this->addSystemMessage(
+                        QString("Reloaded %1 7TV channel emotes.")
+                            .arg(emoteMap.size()));
+                }
             }
             else
             {
                 qCDebug(chatterinoKick)
-                    << "No 7TV emotes found for Kick channel" << this->channelSlug_;
+                    << "No 7TV emotes found for Kick channel"
+                    << this->channelSlug_;
+
+                if (manualRefresh)
+                {
+                    this->addSystemMessage(
+                        "No 7TV channel emotes found for this channel.");
+                }
             }
         },
-        [this](const auto &result) {
+        [this, manualRefresh](const auto &result) {
             qCDebug(chatterinoKick)
-                << "Failed to load 7TV emotes for Kick channel" << this->channelSlug_
-                << ":" << result.formatError();
+                << "Failed to load 7TV emotes for Kick channel"
+                << this->channelSlug_ << ":" << result.formatError();
+
+            if (manualRefresh)
+            {
+                this->addSystemMessage("Failed to reload 7TV channel emotes.");
+            }
         });
+}
+
+void KickChannel::refreshKickChannelEmotes(bool manualRefresh)
+{
+    if (this->broadcasterUserId_ == 0)
+    {
+        qCDebug(chatterinoKick)
+            << "Cannot load Kick emotes: broadcaster ID not resolved";
+        if (manualRefresh)
+        {
+            this->addSystemMessage(
+                "Cannot reload Kick emotes: channel not fully connected.");
+        }
+        return;
+    }
+
+    // Re-fetch available emotes from Kick API
+    this->fetchAvailableEmotes([this, manualRefresh](bool success, int count) {
+        if (success)
+        {
+            if (manualRefresh)
+            {
+                this->addSystemMessage(
+                    QString("Reloaded %1 Kick channel emotes.").arg(count));
+            }
+        }
+        else
+        {
+            if (manualRefresh)
+            {
+                this->addSystemMessage("Failed to reload Kick channel emotes.");
+            }
+        }
+    });
 }
 
 std::shared_ptr<const EmoteMap> KickChannel::getSeventvEmotes() const
 {
     return this->seventvEmotes_;
+}
+
+std::shared_ptr<const EmoteMap> KickChannel::getNativeKickEmotes() const
+{
+    std::shared_lock lock(this->nativeEmotesMutex_);
+    return this->nativeKickEmotes_;
+}
+
+std::shared_ptr<const EmoteMap> KickChannel::getAvailableKickEmotes() const
+{
+    std::shared_lock lock(this->availableEmotesMutex_);
+    return this->availableKickEmotes_;
+}
+
+bool KickChannel::hasSubscriberAccess() const
+{
+    return this->hasSubscriberAccess_;
+}
+
+void KickChannel::fetchAvailableEmotes(
+    std::function<void(bool success, int count)> callback)
+{
+    if (!this->api_)
+    {
+        qCWarning(chatterinoKick)
+            << "Cannot fetch emotes - API not initialized";
+        if (callback)
+        {
+            callback(false, 0);
+        }
+        return;
+    }
+
+    qCDebug(chatterinoKick)
+        << "Fetching available emotes for channel:" << this->channelSlug_;
+
+    // First, check user's role in the channel
+    this->api_->fetchUserRoleInChannel(
+        this->channelSlug_,
+        [this, callback](KickApi::UserRoleResult roleResult) {
+            if (!roleResult.success)
+            {
+                qCWarning(chatterinoKick)
+                    << "Failed to fetch user role:" << roleResult.errorMessage;
+                // Continue anyway - assume no subscriber access
+            }
+
+            this->hasSubscriberAccess_ = roleResult.isSubscribed;
+            qCDebug(chatterinoKick)
+                << "User has subscriber access:" << this->hasSubscriberAccess_
+                << "(role:" << roleResult.role << ")";
+
+            // Now fetch channel emotes
+            this->api_->fetchChannelEmotes(
+                this->channelSlug_,
+                [this, callback](KickApi::ChannelEmotesResult emotesResult) {
+                    if (!emotesResult.success)
+                    {
+                        qCWarning(chatterinoKick) << "Failed to fetch emotes:"
+                                                  << emotesResult.errorMessage;
+                        if (callback)
+                        {
+                            callback(false, 0);
+                        }
+                        return;
+                    }
+
+                    // Filter emotes based on subscription status
+                    auto availableEmotes = std::make_shared<EmoteMap>();
+                    int totalEmotes = emotesResult.emotes.size();
+                    int availableCount = 0;
+
+                    for (const auto &emoteInfo : emotesResult.emotes)
+                    {
+                        // Include emote if:
+                        // 1. It's not subscriber-only, OR
+                        // 2. User has subscriber access
+                        if (!emoteInfo.subscribersOnly || this->hasSubscriberAccess_)
+                        {
+                            // Create emote URL
+                            QString emoteUrl =
+                                QString("https://files.kick.com/emotes/%1/fullsize")
+                                    .arg(emoteInfo.id);
+
+                            // Create the emote with proper sizing
+                            static const QSize KICK_EMOTE_BASE_SIZE(28, 28);
+                            auto emote = std::make_shared<Emote>(Emote{
+                                EmoteName{emoteInfo.name},
+                                ImageSet{Image::fromUrl({emoteUrl}, 1.0,
+                                                        KICK_EMOTE_BASE_SIZE)},
+                                Tooltip{QString("%1 Kick Emote").arg(emoteInfo.name)},
+                                Url{emoteUrl},
+                                false,  // not zero-width
+                                EmoteId{QString::number(emoteInfo.id)},
+                            });
+
+                            availableEmotes->emplace(EmoteName{emoteInfo.name},
+                                                     emote);
+                            availableCount++;
+                        }
+                    }
+
+                    // Store the available emotes
+                    {
+                        std::unique_lock lock(this->availableEmotesMutex_);
+                        this->availableKickEmotes_ = availableEmotes;
+                        this->emotesLoaded_ = true;
+                    }
+
+                    qCDebug(chatterinoKick)
+                        << "Loaded" << availableCount << "of" << totalEmotes
+                        << "emotes for channel" << this->channelSlug_
+                        << "(subscriber access:" << this->hasSubscriberAccess_
+                        << ")";
+
+                    // Emit signal that emotes are updated
+                    this->availableEmotesUpdated.invoke();
+
+                    if (callback)
+                    {
+                        callback(true, availableCount);
+                    }
+                });
+        });
 }
 
 void KickChannel::onMessageReceived(const KickMessage &kickMessage)
@@ -327,7 +537,8 @@ void KickChannel::onMessageReceived(const KickMessage &kickMessage)
 
     // Append 7TV badge for this user (if they have one assigned)
     QString kickUserIdStr = QString::number(kickMessage.sender.id);
-    if (auto badge = getApp()->getSeventvBadges()->getBadge(UserId{kickUserIdStr}))
+    if (auto badge =
+            getApp()->getSeventvBadges()->getBadge(UserId{kickUserIdStr}))
     {
         builder.emplace<BadgeElement>(*badge, MessageElementFlag::BadgeSevenTV);
     }
@@ -346,9 +557,9 @@ void KickChannel::onMessageReceived(const KickMessage &kickMessage)
     }
 
     builder
-        .emplace<TextElement>(usernameText + ":",
-                              MessageElementFlag::Username,
-                              MessageColor(userColor), FontStyle::ChatMediumBold)
+        .emplace<TextElement>(usernameText + ":", MessageElementFlag::Username,
+                              MessageColor(userColor),
+                              FontStyle::ChatMediumBold)
         ->setLink({Link::UserInfo, kickMessage.sender.username});
 
     // Add message content with emote parsing
@@ -390,14 +601,10 @@ void KickChannel::loadUserSevenTVCosmetics(int kickUserId,
     getApp()->getSeventvAPI()->getUserByKickID(
         QString::number(kickUserId),
         [userName, kickUserId](const QJsonObject &connectionJson) {
-            // The Kick endpoint returns a connection object with emote_set_id
-            QString seventvUserId = connectionJson["emote_set_id"].toString();
-
-            if (seventvUserId.isEmpty())
-            {
-                // Try alternative field names
-                seventvUserId = connectionJson["user_id"].toString();
-            }
+            // The /v3/users/KICK/{id} endpoint returns a connection object
+            // The actual 7TV user is nested in the "user" field
+            QJsonObject userObj = connectionJson["user"].toObject();
+            QString seventvUserId = userObj["id"].toString();
 
             if (seventvUserId.isEmpty())
             {
@@ -409,23 +616,15 @@ void KickChannel::loadUserSevenTVCosmetics(int kickUserId,
             qCDebug(chatterinoKick) << "Found 7TV user ID" << seventvUserId
                                     << "for Kick user" << userName;
 
-            // Now fetch the full user profile to get cosmetics (including paint and badge)
-            getApp()->getSeventvAPI()->getUserByID(
-                seventvUserId,
-                [userName, kickUserId](const QJsonObject &userJson) {
-                    // Full user profile includes style.paint and style.badge
-                    auto *paints = getApp()->getSeventvPaints();
-                    if (paints)
-                    {
-                        // Pass Kick user ID for badge assignment
-                        paints->loadUserCosmetics(userJson, userName,
-                                                  QString::number(kickUserId));
-                    }
-                },
-                [userName](const NetworkResult &) {
-                    qCDebug(chatterinoKick)
-                        << "Failed to load 7TV user profile for" << userName;
-                });
+            // The connection response already includes full user data with cosmetics
+            // in the "user" field, so we can directly load cosmetics from it
+            auto *paints = getApp()->getSeventvPaints();
+            if (paints)
+            {
+                // Pass Kick user ID for badge assignment
+                paints->loadUserCosmetics(userObj, userName,
+                                          QString::number(kickUserId));
+            }
         },
         [kickUserId](const NetworkResult &result) {
             // Not an error if 7TV doesn't have this user
@@ -461,15 +660,12 @@ void KickChannel::resolveAndSubscribe()
 
     // Use KickApi to resolve channel slug to chatroom ID
     this->api_->resolveChannelInfo(
-        this->channelSlug_,
-        [this](KickApi::ChannelInfo info) {
+        this->channelSlug_, [this](KickApi::ChannelInfo info) {
             if (!info.success)
             {
                 this->setConnectionState(KickConnectionState::Failed);
                 this->addSystemMessage(
-                    QString("Failed to resolve Kick channel: %1. The channel "
-                            "may not exist or is unavailable.")
-                        .arg(this->channelSlug_));
+                    translateKickError(KickError::ChannelNotFound));
                 return;
             }
 
@@ -502,10 +698,13 @@ void KickChannel::resolveAndSubscribe()
                                         .arg(this->channelSlug_);
                 if (this->isLive_)
                 {
-                    statusMsg += QString(" [LIVE - %1 viewers]")
-                                     .arg(this->viewerCount_);
+                    statusMsg +=
+                        QString(" [LIVE - %1 viewers]").arg(this->viewerCount_);
                 }
                 this->addSystemMessage(statusMsg);
+
+                // Fetch available emotes for this channel
+                this->fetchAvailableEmotes();
 
                 // Load 7TV emotes for this Kick channel
                 this->refreshSevenTVChannelEmotes();
@@ -536,22 +735,23 @@ void KickChannel::scheduleReconnect()
     if (this->reconnectAttempts_ >= MAX_RECONNECT_ATTEMPTS)
     {
         this->setConnectionState(KickConnectionState::Failed);
-        this->addSystemMessage(
-            "Failed to reconnect to Kick after multiple attempts. "
-            "Use the reconnect option to try again.");
+        this->addSystemMessage(translateKickError(KickError::ConnectionFailed) +
+                               " Use the reconnect option to try again.");
         return;
     }
 
-    // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s (capped)
-    int delayMs = std::min(
-        1000 * (1 << this->reconnectAttempts_),
-        30000  // Max 30 seconds
-    );
+    // Exponential backoff with jitter (matching Twitch EventSub pattern)
+    // Base delay: 1s, 2s, 4s, 8s, 16s, 30s (capped)
+    int baseDelayMs = std::min(1000 * (1 << this->reconnectAttempts_), 30000);
+
+    // Add random jitter (0-25% of base delay) to prevent thundering herd
+    int jitterMs = QRandomGenerator::global()->bounded(baseDelayMs / 4);
+    int delayMs = baseDelayMs + jitterMs;
 
     this->reconnectAttempts_++;
 
     this->addSystemMessage(
-        QString("Reconnecting to Kick in %1 seconds... (attempt %2/%3)")
+        QStringLiteral("Reconnecting to Kick in %1 seconds... (attempt %2/%3)")
             .arg(delayMs / 1000)
             .arg(this->reconnectAttempts_)
             .arg(MAX_RECONNECT_ATTEMPTS));
@@ -559,6 +759,7 @@ void KickChannel::scheduleReconnect()
     QTimer::singleShot(delayMs, [this] {
         if (this->connectionState_ == KickConnectionState::Reconnecting)
         {
+            this->addSystemMessage(QStringLiteral("Reconnecting..."));
             this->disconnect();
             this->connect();
         }
@@ -645,14 +846,78 @@ void KickChannel::addTextOrEmote(MessageBuilder &builder,
     }
 }
 
+QString KickChannel::convertEmotesForSending(const QString &message) const
+{
+    // Convert native Kick emote names to [emote:ID:NAME] format
+    // This is required for Kick to recognize and render emotes in chat
+
+    // Get native Kick emotes from this channel
+    std::shared_ptr<const EmoteMap> channelEmotes;
+    {
+        std::shared_lock lock(this->nativeEmotesMutex_);
+        channelEmotes = this->nativeKickEmotes_;
+    }
+
+    // Get global Kick emotes
+    auto globalEmotes = getApp()->getKickEmotes()->globalEmotes();
+
+    // If no emotes available at all, return unchanged
+    bool hasChannelEmotes = channelEmotes && !channelEmotes->empty();
+    bool hasGlobalEmotes = globalEmotes && !globalEmotes->empty();
+
+    if (!hasChannelEmotes && !hasGlobalEmotes)
+    {
+        return message;
+    }
+
+    // Split message into words and check each against known emotes
+    QStringList words = message.split(' ');
+    for (int i = 0; i < words.size(); i++)
+    {
+        const QString &word = words[i];
+        EmotePtr foundEmote = nullptr;
+
+        // First check channel emotes
+        if (hasChannelEmotes)
+        {
+            auto it = channelEmotes->find(EmoteName{word});
+            if (it != channelEmotes->end())
+            {
+                foundEmote = it->second;
+            }
+        }
+
+        // Then check global emotes if not found in channel
+        if (!foundEmote && hasGlobalEmotes)
+        {
+            auto it = globalEmotes->find(EmoteName{word});
+            if (it != globalEmotes->end())
+            {
+                foundEmote = it->second;
+            }
+        }
+
+        if (foundEmote)
+        {
+            // Convert to [emote:ID:NAME] format
+            QString emoteId = foundEmote->id.string;
+            if (!emoteId.isEmpty())
+            {
+                words[i] = QString("[emote:%1:%2]").arg(emoteId, word);
+            }
+        }
+    }
+
+    return words.join(' ');
+}
+
 void KickChannel::parseMessageContent(MessageBuilder &builder,
                                       const QString &content,
                                       const std::vector<KickEmote> &emotes)
 {
     // Regex to match [emote:ID:NAME] pattern (fallback if API positions don't work)
     // Format: [emote:37218:Clap] where 37218 is the emote ID and Clap is the name
-    static const QRegularExpression emoteRegex(
-        R"(\[emote:(\d+):([^\]]+)\])");
+    static const QRegularExpression emoteRegex(R"(\[emote:(\d+):([^\]]+)\])");
 
     // First, try to use emotes from API if they have valid positions
     bool hasValidApiEmotes = false;
@@ -741,29 +1006,40 @@ void KickChannel::parseMessageContent(MessageBuilder &builder,
                     }
                 }
 
-                // Add Kick emote
+                // Add Kick emote with proper ImageSet (matching Twitch sizing)
                 QString emoteUrl =
                     QString("https://files.kick.com/emotes/%1/fullsize")
                         .arg(range.emoteId);
 
                 EmoteId emoteId{range.emoteId};
-                EmoteName emoteName{range.emoteName.isEmpty() ? range.emoteId
-                                                              : range.emoteName};
+                EmoteName emoteName{range.emoteName.isEmpty()
+                                        ? range.emoteId
+                                        : range.emoteName};
 
-                // Kick fullsize emotes are 70x70
-                // Scale to match Twitch's base size (28x28) so emoteScale setting works uniformly
-                // 28/70 ≈ 0.4, so scale factor of 0.4 renders at ~28px base
-                constexpr QSize KICK_EMOTE_SIZE(70, 70);
+                // Create ImageSet with single image for Kick emotes
+                // Kick provides a single high-res image - we create ONE Image and let
+                // the system scale it. Using same URL for multiple Image::fromUrl calls
+                // returns the same cached object anyway, so we only need the 1x version.
+                constexpr QSize BASE_EMOTE_SIZE(28, 28);
+
                 auto emote = std::make_shared<Emote>(Emote{
                     emoteName,
-                    ImageSet{
-                        Image::fromUrl({emoteUrl}, 0.4, KICK_EMOTE_SIZE),
-                    },
+                    ImageSet{Image::fromUrl({emoteUrl}, 1.0, BASE_EMOTE_SIZE)},
                     Tooltip{emoteName.string + "<br>Kick Emote"},
                     Url{emoteUrl},
                     false,
                     emoteId,
                 });
+
+                // Store emote for autocomplete (thread-safe)
+                {
+                    std::unique_lock lock(this->nativeEmotesMutex_);
+                    if (this->nativeKickEmotes_->find(emoteName) ==
+                        this->nativeKickEmotes_->end())
+                    {
+                        (*this->nativeKickEmotes_)[emoteName] = emote;
+                    }
+                }
 
                 builder.emplace<EmoteElement>(emote, MessageElementFlag::Emote);
                 currentPos = range.end;
@@ -800,8 +1076,8 @@ void KickChannel::parseMessageContent(MessageBuilder &builder,
         EmoteMatch em;
         em.start = match.capturedStart();
         em.end = match.capturedEnd();
-        em.emoteId = match.captured(1);   // The numeric ID
-        em.emoteName = match.captured(2); // The emote name
+        em.emoteId = match.captured(1);    // The numeric ID
+        em.emoteName = match.captured(2);  // The emote name
         matches.push_back(em);
     }
 
@@ -821,7 +1097,7 @@ void KickChannel::parseMessageContent(MessageBuilder &builder,
             }
         }
 
-        // Add native Kick emote element
+        // Add native Kick emote element with single-image ImageSet
         // Kick emote CDN URL: https://files.kick.com/emotes/{emote_id}/fullsize
         QString emoteUrl = QString("https://files.kick.com/emotes/%1/fullsize")
                                .arg(em.emoteId);
@@ -829,19 +1105,27 @@ void KickChannel::parseMessageContent(MessageBuilder &builder,
         EmoteId emoteId{em.emoteId};
         EmoteName emoteName{em.emoteName};
 
-        // Kick fullsize emotes are 70x70
-        // Scale to match Twitch's base size (28x28) so emoteScale setting works uniformly
-        constexpr QSize KICK_EMOTE_SIZE(70, 70);
+        // Create ImageSet with single image - Kick provides one high-res image
+        // The system will scale it as needed for different display densities
+        constexpr QSize BASE_EMOTE_SIZE(28, 28);
         auto emote = std::make_shared<Emote>(Emote{
             emoteName,
-            ImageSet{
-                Image::fromUrl({emoteUrl}, 0.4, KICK_EMOTE_SIZE),
-            },
+            ImageSet{Image::fromUrl({emoteUrl}, 1.0, BASE_EMOTE_SIZE)},
             Tooltip{emoteName.string + "<br>Kick Emote"},
             Url{emoteUrl},
             false,  // Not zero-width
             emoteId,
         });
+
+        // Store emote for autocomplete (thread-safe)
+        {
+            std::unique_lock lock(this->nativeEmotesMutex_);
+            if (this->nativeKickEmotes_->find(emoteName) ==
+                this->nativeKickEmotes_->end())
+            {
+                (*this->nativeKickEmotes_)[emoteName] = emote;
+            }
+        }
 
         builder.emplace<EmoteElement>(emote, MessageElementFlag::Emote);
 
@@ -865,4 +1149,3 @@ void KickChannel::parseMessageContent(MessageBuilder &builder,
 }
 
 }  // namespace chatterino
-

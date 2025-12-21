@@ -297,9 +297,20 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
                 switch (button)
                 {
                     case Qt::LeftButton: {
-                        QDesktopServices::openUrl(
-                            QUrl("https://www.twitch.tv/" +
-                                 this->userName_.toLower()));
+                        // Open correct platform URL based on channel type
+                        if (this->channel_ &&
+                            this->channel_->getType() == Channel::Type::Kick)
+                        {
+                            QDesktopServices::openUrl(
+                                QUrl("https://kick.com/" +
+                                     this->userName_.toLower()));
+                        }
+                        else
+                        {
+                            QDesktopServices::openUrl(
+                                QUrl("https://www.twitch.tv/" +
+                                     this->userName_.toLower()));
+                        }
                     }
                     break;
 
@@ -940,6 +951,28 @@ void UserInfoPopup::updateLatestMessages()
 
 void UserInfoPopup::updateUserData()
 {
+    // Check if this is a Kick channel - don't fetch Twitch data for Kick users
+    if (this->channel_ && this->channel_->getType() == Channel::Type::Kick)
+    {
+        // Show Kick-specific user info
+        this->ui_.followerCountLabel->setText("Kick User");
+        this->ui_.createdDateLabel->setText("Platform: Kick.com");
+        this->ui_.userIDLabel->setText("Click username to view on Kick");
+        this->ui_.userIDLabel->setProperty("copy-text", this->userName_);
+
+        // Use the Kick platform icon as avatar for Kick users
+        this->ui_.avatarButton->setPixmap(
+            getResources().platforms.kick.scaled(64, 64, Qt::KeepAspectRatio,
+                                                  Qt::SmoothTransformation));
+
+        // Hide Twitch-specific UI elements for Kick users
+        this->ui_.localizedNameLabel->setVisible(false);
+        this->ui_.localizedNameCopyButton->setVisible(false);
+        this->ui_.usercardLabel->hide();
+
+        return;
+    }
+
     std::weak_ptr<bool> hack = this->lifetimeHack_;
     auto currentUser = getApp()->getAccounts()->twitch.getCurrent();
 

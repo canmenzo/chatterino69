@@ -64,10 +64,32 @@ public:
     void fetchRecentMessages();
 
     /// Refresh 7TV channel emotes (uses Kick-specific 7TV endpoint)
-    void refreshSevenTVChannelEmotes();
+    /// @param manualRefresh If true, shows system messages on completion
+    void refreshSevenTVChannelEmotes(bool manualRefresh = false);
+
+    /// Refresh native Kick channel emotes
+    /// @param manualRefresh If true, shows system messages on completion
+    void refreshKickChannelEmotes(bool manualRefresh = false);
 
     /// Get 7TV emotes for this channel
     [[nodiscard]] std::shared_ptr<const EmoteMap> getSeventvEmotes() const;
+
+    /// Get native Kick emotes seen in this channel (accumulated from messages)
+    [[nodiscard]] std::shared_ptr<const EmoteMap> getNativeKickEmotes() const;
+
+    /// Get available Kick emotes that the user can actually use
+    /// This is filtered based on the user's subscription status
+    [[nodiscard]] std::shared_ptr<const EmoteMap> getAvailableKickEmotes() const;
+
+    /// Fetch available emotes from Kick API and filter by user's access
+    /// @param callback Called when emotes are loaded (success, count)
+    void fetchAvailableEmotes(std::function<void(bool success, int count)> callback = nullptr);
+
+    /// Check if user has subscriber access to this channel
+    [[nodiscard]] bool hasSubscriberAccess() const;
+
+    /// Signal emitted when available emotes are updated
+    pajlada::Signals::NoArgSignal availableEmotesUpdated;
 
     /// Signal emitted when connection state changes
     pajlada::Signals::Signal<KickConnectionState> connectionStateChanged;
@@ -111,6 +133,11 @@ private:
     /// @param text The text to add (may contain emote names)
     void addTextOrEmote(MessageBuilder &builder, const QString &text) const;
 
+    /// Convert native Kick emote names to [emote:ID:NAME] format for sending
+    /// @param message The message to process
+    /// @return The message with emote names converted to Kick format
+    QString convertEmotesForSending(const QString &message) const;
+
     QString channelSlug_;
     int chatroomId_{0};         // Used for WebSocket subscription
     int broadcasterUserId_{0};  // Used for REST API (sending messages)
@@ -126,6 +153,16 @@ private:
 
     // 7TV emotes for this Kick channel
     std::shared_ptr<const EmoteMap> seventvEmotes_;
+
+    // Native Kick emotes seen in this channel (accumulated from messages)
+    mutable std::shared_mutex nativeEmotesMutex_;
+    std::shared_ptr<EmoteMap> nativeKickEmotes_;
+
+    // Available Kick emotes the user can send (filtered by subscription status)
+    mutable std::shared_mutex availableEmotesMutex_;
+    std::shared_ptr<EmoteMap> availableKickEmotes_;
+    bool hasSubscriberAccess_{false};
+    bool emotesLoaded_{false};
 
     // Reconnection state
     int reconnectAttempts_{0};

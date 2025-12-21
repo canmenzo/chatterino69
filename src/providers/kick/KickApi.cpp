@@ -4,7 +4,7 @@
 #include "providers/kick/KickAccount.hpp"
 
 #include <pajlada/signals/scoped-connection.hpp>
-
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkAccessManager>
@@ -12,6 +12,110 @@
 #include <QNetworkRequest>
 
 namespace chatterino {
+
+QString translateKickError(KickError error, const QString &apiMessage,
+                           int secondsUntilReset)
+{
+    switch (error)
+    {
+        case KickError::MissingText:
+            return QStringLiteral("You can't send an empty message.");
+
+        case KickError::BadRequest:
+            if (!apiMessage.isEmpty())
+            {
+                return QStringLiteral("Failed to send message: %1")
+                    .arg(apiMessage);
+            }
+            return QStringLiteral("Failed to send message: Invalid request.");
+
+        case KickError::Forbidden:
+            return QStringLiteral(
+                "You don't have permission to send messages in this channel.");
+
+        case KickError::RateLimited:
+            if (secondsUntilReset > 0)
+            {
+                return QStringLiteral("You're sending messages too quickly. "
+                                      "Kick allows 3 messages "
+                                      "per second. Please wait %1 seconds "
+                                      "before sending another "
+                                      "message.")
+                    .arg(secondsUntilReset);
+            }
+            return QStringLiteral(
+                "You're sending messages too quickly. Kick allows 3 messages "
+                "per "
+                "second. Please wait before sending another message.");
+
+        case KickError::UserMissingScope:
+            return QStringLiteral("Missing required scope. Re-login with your "
+                                  "account and try again.");
+
+        case KickError::TokenExpired:
+            return QStringLiteral(
+                "Your session has expired. Please log in again.");
+
+        case KickError::ConnectionFailed:
+            return QStringLiteral("Failed to connect to Kick chat. Check your "
+                                  "internet connection "
+                                  "or verify the channel name is correct.");
+
+        case KickError::ChannelNotFound:
+            return QStringLiteral("Channel not found. Please verify the "
+                                  "channel name is correct.");
+
+        case KickError::MessageTooLong:
+            return QStringLiteral(
+                "Your message is too long. Kick messages can be at most 500 "
+                "characters.");
+
+        case KickError::Unknown:
+        default:
+            if (!apiMessage.isEmpty())
+            {
+                return QStringLiteral("An error occurred: %1").arg(apiMessage);
+            }
+            return QStringLiteral("An unknown error occurred.");
+    }
+}
+
+KickError mapHttpStatusToKickError(int httpStatus, const QString &apiMessage)
+{
+    switch (httpStatus)
+    {
+        case 400:
+            // Check if it's a message length issue
+            if (apiMessage.contains(QStringLiteral("too long"),
+                                    Qt::CaseInsensitive) ||
+                apiMessage.contains(QStringLiteral("500"), Qt::CaseInsensitive))
+            {
+                return KickError::MessageTooLong;
+            }
+            return KickError::BadRequest;
+
+        case 401:
+            // Distinguish between missing scope and expired token
+            if (apiMessage.contains(QStringLiteral("expired"),
+                                    Qt::CaseInsensitive))
+            {
+                return KickError::TokenExpired;
+            }
+            return KickError::UserMissingScope;
+
+        case 403:
+            return KickError::Forbidden;
+
+        case 404:
+            return KickError::ChannelNotFound;
+
+        case 429:
+            return KickError::RateLimited;
+
+        default:
+            return KickError::Unknown;
+    }
+}
 
 KickApi::KickApi(QObject *parent)
     : QObject(parent)
@@ -31,17 +135,16 @@ std::shared_ptr<KickAccount> KickApi::getAccount() const
     return this->account_;
 }
 
-void KickApi::resolveChannelInfo(
-    const QString &channelSlug,
-    std::function<void(ChannelInfo info)> callback)
+void KickApi::resolveChannelInfo(const QString &channelSlug,
+                                 std::function<void(ChannelInfo info)> callback)
 {
     // Use the channel API to get broadcaster info
     // Note: This uses unofficial endpoint as official API doesn't expose this
     QString url = QString("%1/channels/%2")
                       .arg(QString::fromLatin1(KICK_CHANNEL_API), channelSlug);
 
-    qCDebug(chatterinoKick) << "Resolving channel info for:" << channelSlug
-                            << "URL:" << url;
+    qCDebug(chatterinoKick)
+        << "Resolving channel info for:" << channelSlug << "URL:" << url;
 
     QNetworkRequest request{QUrl{url}};
     request.setHeader(QNetworkRequest::UserAgentHeader, "Chatterino7");
@@ -49,92 +152,94 @@ void KickApi::resolveChannelInfo(
 
     QNetworkReply *reply = this->networkManager_->get(request);
 
-    QObject::connect(reply, &QNetworkReply::finished, this,
-                     [this, reply, callback, channelSlug] {
-        reply->deleteLater();
+    QObject::connect(
+        reply, &QNetworkReply::finished, this,
+        [reply, callback, channelSlug] {
+            reply->deleteLater();
 
-        ChannelInfo info;
-        info.slug = channelSlug;
+            ChannelInfo info;
+            info.slug = channelSlug;
 
-        if (reply->error() != QNetworkReply::NoError)
-        {
-            qCWarning(chatterinoKick)
-                << "Failed to resolve channel info for" << channelSlug
-                << ":" << reply->errorString();
+            if (reply->error() != QNetworkReply::NoError)
+            {
+                qCWarning(chatterinoKick)
+                    << "Failed to resolve channel info for" << channelSlug
+                    << ":" << reply->errorString();
+                callback(info);
+                return;
+            }
+
+            QByteArray responseData = reply->readAll();
+            QJsonDocument doc = QJsonDocument::fromJson(responseData);
+
+            if (!doc.isObject())
+            {
+                qCWarning(chatterinoKick) << "Invalid channel response";
+                callback(info);
+                return;
+            }
+
+            QJsonObject obj = doc.object();
+
+            // Extract broadcaster user_id from response
+            // The structure includes: { "user_id": 12345, "chatroom": { "id": 67890 } }
+            if (obj.contains("user_id"))
+            {
+                info.broadcasterUserId = obj["user_id"].toInt();
+            }
+            else if (obj.contains("user") && obj["user"].isObject())
+            {
+                // Alternative structure: { "user": { "id": 12345 } }
+                info.broadcasterUserId = obj["user"].toObject()["id"].toInt();
+            }
+
+            // Extract chatroom ID
+            if (obj.contains("chatroom") && obj["chatroom"].isObject())
+            {
+                QJsonObject chatroom = obj["chatroom"].toObject();
+                info.chatroomId = chatroom["id"].toInt();
+            }
+            else if (obj.contains("id"))
+            {
+                // Sometimes the channel ID is used as chatroom ID
+                info.chatroomId = obj["id"].toInt();
+            }
+
+            // Extract display name
+            if (obj.contains("user") && obj["user"].isObject())
+            {
+                info.displayName =
+                    obj["user"].toObject()["username"].toString();
+            }
+
+            // Extract livestream info (check if channel is live)
+            if (obj.contains("livestream") && !obj["livestream"].isNull())
+            {
+                QJsonObject livestream = obj["livestream"].toObject();
+                info.isLive = livestream["is_live"].toBool();
+                info.streamTitle = livestream["session_title"].toString();
+                info.viewerCount = livestream["viewer_count"].toInt();
+            }
+
+            if (info.broadcasterUserId > 0 && info.chatroomId > 0)
+            {
+                info.success = true;
+                qCDebug(chatterinoKick)
+                    << "Resolved channel" << channelSlug
+                    << "- broadcaster ID:" << info.broadcasterUserId
+                    << "- isLive:" << info.isLive
+                    << "- chatroom ID:" << info.chatroomId;
+            }
+            else
+            {
+                qCWarning(chatterinoKick)
+                    << "Incomplete channel info for" << channelSlug
+                    << "- broadcaster ID:" << info.broadcasterUserId
+                    << "- chatroom ID:" << info.chatroomId;
+            }
+
             callback(info);
-            return;
-        }
-
-        QByteArray responseData = reply->readAll();
-        QJsonDocument doc = QJsonDocument::fromJson(responseData);
-
-        if (!doc.isObject())
-        {
-            qCWarning(chatterinoKick) << "Invalid channel response";
-            callback(info);
-            return;
-        }
-
-        QJsonObject obj = doc.object();
-
-        // Extract broadcaster user_id from response
-        // The structure includes: { "user_id": 12345, "chatroom": { "id": 67890 } }
-        if (obj.contains("user_id"))
-        {
-            info.broadcasterUserId = obj["user_id"].toInt();
-        }
-        else if (obj.contains("user") && obj["user"].isObject())
-        {
-            // Alternative structure: { "user": { "id": 12345 } }
-            info.broadcasterUserId = obj["user"].toObject()["id"].toInt();
-        }
-
-        // Extract chatroom ID
-        if (obj.contains("chatroom") && obj["chatroom"].isObject())
-        {
-            QJsonObject chatroom = obj["chatroom"].toObject();
-            info.chatroomId = chatroom["id"].toInt();
-        }
-        else if (obj.contains("id"))
-        {
-            // Sometimes the channel ID is used as chatroom ID
-            info.chatroomId = obj["id"].toInt();
-        }
-
-        // Extract display name
-        if (obj.contains("user") && obj["user"].isObject())
-        {
-            info.displayName = obj["user"].toObject()["username"].toString();
-        }
-
-        // Extract livestream info (check if channel is live)
-        if (obj.contains("livestream") && !obj["livestream"].isNull())
-        {
-            QJsonObject livestream = obj["livestream"].toObject();
-            info.isLive = livestream["is_live"].toBool();
-            info.streamTitle = livestream["session_title"].toString();
-            info.viewerCount = livestream["viewer_count"].toInt();
-        }
-
-        if (info.broadcasterUserId > 0 && info.chatroomId > 0)
-        {
-            info.success = true;
-            qCDebug(chatterinoKick)
-                << "Resolved channel" << channelSlug
-                << "- broadcaster ID:" << info.broadcasterUserId
-                << "- isLive:" << info.isLive
-                << "- chatroom ID:" << info.chatroomId;
-        }
-        else
-        {
-            qCWarning(chatterinoKick)
-                << "Incomplete channel info for" << channelSlug
-                << "- broadcaster ID:" << info.broadcasterUserId
-                << "- chatroom ID:" << info.chatroomId;
-        }
-
-        callback(info);
-    });
+        });
 }
 
 void KickApi::resolveBroadcasterId(
@@ -154,7 +259,7 @@ void KickApi::sendMessage(int broadcasterUserId, const QString &message,
     {
         KickApiResult result;
         result.success = false;
-        result.errorMessage = "Not authenticated";
+        result.errorMessage = translateKickError(KickError::UserMissingScope);
         callback(result);
         return;
     }
@@ -164,11 +269,17 @@ void KickApi::sendMessage(int broadcasterUserId, const QString &message,
     {
         KickApiResult result;
         result.success = false;
-        result.errorMessage = "Rate limited";
         result.rateLimit = this->rateLimitInfo_;
 
         int secondsUntilReset =
             QDateTime::currentDateTime().secsTo(this->rateLimitInfo_.resetAt);
+        if (secondsUntilReset < 0)
+        {
+            secondsUntilReset = 0;
+        }
+
+        result.errorMessage =
+            translateKickError(KickError::RateLimited, {}, secondsUntilReset);
         this->rateLimited.invoke(secondsUntilReset);
 
         callback(result);
@@ -200,64 +311,67 @@ void KickApi::sendMessage(int broadcasterUserId, const QString &message,
     // Required fields: content, type
     // broadcaster_user_id is required when type="user"
     QJsonObject body;
-    body["content"] = message;                       // Message text (max 500 chars)
-    body["type"] = QString("user");                  // Send as user (not bot)
-    body["broadcaster_user_id"] = broadcasterUserId; // Required for type="user"
+    body["content"] = message;       // Message text (max 500 chars)
+    body["type"] = QString("user");  // Send as user (not bot)
+    body["broadcaster_user_id"] =
+        broadcasterUserId;  // Required for type="user"
     QJsonDocument bodyDoc(body);
 
-    QNetworkReply *reply =
-        this->networkManager_->post(request, bodyDoc.toJson(QJsonDocument::Compact));
+    QNetworkReply *reply = this->networkManager_->post(
+        request, bodyDoc.toJson(QJsonDocument::Compact));
 
-    QObject::connect(reply, &QNetworkReply::finished, this,
-                     [this, reply, callback, broadcasterUserId, message] {
-        reply->deleteLater();
+    QObject::connect(
+        reply, &QNetworkReply::finished, this,
+        [this, reply, callback, broadcasterUserId, message] {
+            reply->deleteLater();
 
-        // Update rate limit info from headers
-        this->updateRateLimitFromReply(reply);
+            // Update rate limit info from headers
+            this->updateRateLimitFromReply(reply);
 
-        KickApiResult result;
-        result.rateLimit = this->rateLimitInfo_;
+            KickApiResult result;
+            result.rateLimit = this->rateLimitInfo_;
 
-        int statusCode =
-            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        result.httpStatus = statusCode;
+            int statusCode =
+                reply->attribute(QNetworkRequest::HttpStatusCodeAttribute)
+                    .toInt();
+            result.httpStatus = statusCode;
 
-        if (reply->error() != QNetworkReply::NoError)
-        {
-            result = this->handleErrorResponse(reply);
-
-            // Handle specific error codes
-            if (statusCode == 401)
+            if (reply->error() != QNetworkReply::NoError)
             {
-                // Token expired, try refresh
-                this->refreshAndRetry([this, broadcasterUserId, message, callback] {
-                    this->sendMessage(broadcasterUserId, message, callback);
-                });
+                result = this->handleErrorResponse(reply);
+
+                // Handle specific error codes
+                if (statusCode == 401)
+                {
+                    // Token expired, try refresh
+                    this->refreshAndRetry([this, broadcasterUserId, message,
+                                           callback] {
+                        this->sendMessage(broadcasterUserId, message, callback);
+                    });
+                    return;
+                }
+                else if (statusCode == 429)
+                {
+                    // Rate limited
+                    int secondsUntilReset = QDateTime::currentDateTime().secsTo(
+                        this->rateLimitInfo_.resetAt);
+                    this->rateLimited.invoke(secondsUntilReset);
+                }
+                else if (statusCode == 403)
+                {
+                    // Banned or no permission - already translated by handleErrorResponse
+                }
+
+                callback(result);
                 return;
             }
-            else if (statusCode == 429)
-            {
-                // Rate limited
-                int secondsUntilReset = QDateTime::currentDateTime().secsTo(
-                    this->rateLimitInfo_.resetAt);
-                this->rateLimited.invoke(secondsUntilReset);
-            }
-            else if (statusCode == 403)
-            {
-                // Banned or no permission
-                result.errorMessage = "You don't have permission to send "
-                                      "messages in this channel";
-            }
 
+            result.success = true;
+            qCDebug(chatterinoKick)
+                << "Message sent successfully to broadcaster"
+                << broadcasterUserId;
             callback(result);
-            return;
-        }
-
-        result.success = true;
-        qCDebug(chatterinoKick)
-            << "Message sent successfully to broadcaster" << broadcasterUserId;
-        callback(result);
-    });
+        });
 }
 
 KickRateLimitInfo KickApi::getRateLimitInfo() const
@@ -305,29 +419,52 @@ KickApiResult KickApi::handleErrorResponse(QNetworkReply *reply)
     QByteArray responseData = reply->readAll();
     QJsonDocument doc = QJsonDocument::fromJson(responseData);
 
+    QString rawApiMessage;
     if (doc.isObject())
     {
         QJsonObject obj = doc.object();
         if (obj.contains("message"))
         {
-            result.errorMessage = obj["message"].toString();
+            rawApiMessage = obj["message"].toString();
         }
         else if (obj.contains("error"))
         {
-            result.errorMessage = obj["error"].toString();
+            rawApiMessage = obj["error"].toString();
         }
         else
         {
-            result.errorMessage = reply->errorString();
+            rawApiMessage = reply->errorString();
         }
     }
     else
     {
-        result.errorMessage = reply->errorString();
+        rawApiMessage = reply->errorString();
     }
 
+    // Map HTTP status to KickError and translate to user-friendly message
+    KickError error =
+        mapHttpStatusToKickError(result.httpStatus, rawApiMessage);
+
+    // Calculate seconds until rate limit reset if applicable
+    int secondsUntilReset = 0;
+    if (error == KickError::RateLimited &&
+        this->rateLimitInfo_.resetAt.isValid())
+    {
+        secondsUntilReset =
+            QDateTime::currentDateTime().secsTo(this->rateLimitInfo_.resetAt);
+        if (secondsUntilReset < 0)
+        {
+            secondsUntilReset = 0;
+        }
+    }
+
+    // Translate to user-friendly message
+    result.errorMessage =
+        translateKickError(error, rawApiMessage, secondsUntilReset);
+
     qCWarning(chatterinoKick)
-        << "API error:" << result.httpStatus << result.errorMessage;
+        << "API error:" << result.httpStatus << rawApiMessage
+        << "-> User message:" << result.errorMessage;
 
     return result;
 }
@@ -344,7 +481,8 @@ void KickApi::refreshAndRetry(std::function<void()> retryFn)
     // Connect to token refresh result
     // Use shared_ptr to ensure the connection outlives the callback scope
     auto connection = std::make_shared<pajlada::Signals::ScopedConnection>();
-    *connection = this->account_->tokenRefreshed.connect([retryFn, connection](bool success) {
+    *connection = this->account_->tokenRefreshed.connect([retryFn, connection](
+                                                             bool success) {
         if (success)
         {
             qCDebug(chatterinoKick) << "Token refreshed, retrying request...";
@@ -361,5 +499,153 @@ void KickApi::refreshAndRetry(std::function<void()> retryFn)
     this->account_->refreshAccessToken();
 }
 
-}  // namespace chatterino
+void KickApi::fetchChannelEmotes(
+    const QString &channelSlug,
+    std::function<void(ChannelEmotesResult result)> callback)
+{
+    // Public endpoint: https://kick.com/emotes/{channel}
+    // Returns: [{ "emotes": [{ "id": int, "name": string, "subscribers_only": bool }] }]
+    QString url = QString("https://kick.com/emotes/%1").arg(channelSlug);
 
+    qCDebug(chatterinoKick) << "Fetching channel emotes for:" << channelSlug;
+
+    QNetworkRequest request{QUrl{url}};
+    request.setHeader(QNetworkRequest::UserAgentHeader,
+                      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                      "AppleWebKit/537.36 (KHTML, like Gecko) "
+                      "Chrome/120.0.0.0 Safari/537.36");
+    request.setRawHeader("Accept", "application/json");
+
+    QNetworkReply *reply = this->networkManager_->get(request);
+
+    QObject::connect(reply, &QNetworkReply::finished, this,
+                     [reply, callback, channelSlug] {
+                         reply->deleteLater();
+
+                         ChannelEmotesResult result;
+                         result.channelSlug = channelSlug;
+
+                         if (reply->error() != QNetworkReply::NoError)
+                         {
+                             result.errorMessage = reply->errorString();
+                             qCWarning(chatterinoKick)
+                                 << "Failed to fetch emotes for" << channelSlug
+                                 << ":" << result.errorMessage;
+                             callback(result);
+                             return;
+                         }
+
+                         QByteArray responseData = reply->readAll();
+                         QJsonDocument doc = QJsonDocument::fromJson(responseData);
+
+                         if (!doc.isArray() || doc.array().isEmpty())
+                         {
+                             result.errorMessage = "Invalid emotes response";
+                             qCWarning(chatterinoKick)
+                                 << "Invalid emotes response for" << channelSlug;
+                             callback(result);
+                             return;
+                         }
+
+                         // Response is: [{ ..., "emotes": [...] }]
+                         QJsonObject channelObj = doc.array().first().toObject();
+                         QJsonArray emotesArray = channelObj["emotes"].toArray();
+
+                         result.emotes.reserve(emotesArray.size());
+                         for (const auto &emoteVal : emotesArray)
+                         {
+                             QJsonObject emoteObj = emoteVal.toObject();
+                             KickEmoteInfo emote;
+                             emote.id = emoteObj["id"].toInt();
+                             emote.name = emoteObj["name"].toString();
+                             emote.subscribersOnly =
+                                 emoteObj["subscribers_only"].toBool();
+                             result.emotes.push_back(emote);
+                         }
+
+                         result.success = true;
+                         qCDebug(chatterinoKick)
+                             << "Fetched" << result.emotes.size()
+                             << "emotes for channel" << channelSlug;
+
+                         callback(result);
+                     });
+}
+
+void KickApi::fetchUserRoleInChannel(
+    const QString &channelSlug,
+    std::function<void(UserRoleResult result)> callback)
+{
+    // Public endpoint: https://kick.com/api/v2/channels/{channel}
+    // Returns: { ..., "role": null | "subscriber" | "moderator" | "broadcaster" }
+    QString url =
+        QString("%1/channels/%2").arg(QString::fromLatin1(KICK_CHANNEL_API), channelSlug);
+
+    qCDebug(chatterinoKick) << "Fetching user role in channel:" << channelSlug;
+
+    QNetworkRequest request{QUrl{url}};
+    request.setHeader(QNetworkRequest::UserAgentHeader,
+                      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                      "AppleWebKit/537.36 (KHTML, like Gecko) "
+                      "Chrome/120.0.0.0 Safari/537.36");
+    request.setRawHeader("Accept", "application/json");
+
+    QNetworkReply *reply = this->networkManager_->get(request);
+
+    QObject::connect(reply, &QNetworkReply::finished, this,
+                     [reply, callback, channelSlug] {
+                         reply->deleteLater();
+
+                         UserRoleResult result;
+                         result.channelSlug = channelSlug;
+
+                         if (reply->error() != QNetworkReply::NoError)
+                         {
+                             result.errorMessage = reply->errorString();
+                             qCWarning(chatterinoKick)
+                                 << "Failed to fetch role in" << channelSlug
+                                 << ":" << result.errorMessage;
+                             callback(result);
+                             return;
+                         }
+
+                         QByteArray responseData = reply->readAll();
+                         QJsonDocument doc = QJsonDocument::fromJson(responseData);
+
+                         if (!doc.isObject())
+                         {
+                             result.errorMessage = "Invalid channel response";
+                             qCWarning(chatterinoKick)
+                                 << "Invalid channel response for" << channelSlug;
+                             callback(result);
+                             return;
+                         }
+
+                         QJsonObject obj = doc.object();
+
+                         // Extract role field
+                         // null = no special role (not subscribed)
+                         // "subscriber", "moderator", "broadcaster" = has access
+                         if (obj["role"].isNull())
+                         {
+                             result.role = QString();
+                             result.isSubscribed = false;
+                         }
+                         else
+                         {
+                             result.role = obj["role"].toString();
+                             // Any non-null role grants subscriber emote access
+                             result.isSubscribed = !result.role.isEmpty();
+                         }
+
+                         result.success = true;
+                         qCDebug(chatterinoKick)
+                             << "User role in" << channelSlug << ":"
+                             << (result.role.isEmpty() ? "none" : result.role)
+                             << "- isSubscribed:" << result.isSubscribed;
+
+                         callback(result);
+                     });
+}
+
+}  // namespace chatterino

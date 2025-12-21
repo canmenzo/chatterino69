@@ -4,7 +4,6 @@
 #include "providers/kick/KickOAuthFlow.hpp"
 
 #include <pajlada/signals/signal.hpp>
-
 #include <QDateTime>
 #include <QString>
 
@@ -62,12 +61,16 @@ public:
     pajlada::Signals::Signal<bool> authenticationChanged;
 
 private:
+    /// Internal token refresh implementation with retry support
+    void doRefreshAccessToken(int retryAttempt);
+
     QString username_;
     int userId_{0};
     QString accessToken_;
     QString refreshToken_;
     QDateTime expiresAt_;
+    bool isRefreshing_{false};
+    static constexpr int MAX_REFRESH_RETRIES = 2;
 };
 
 }  // namespace chatterino
-

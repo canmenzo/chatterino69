@@ -444,6 +444,8 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
 
     auto *twitchChannel =
         dynamic_cast<TwitchChannel *>(this->split_->getChannel().get());
+    auto *kickChannel =
+        dynamic_cast<KickChannel *>(this->split_->getChannel().get());
 
     if (twitchChannel)
     {
@@ -520,6 +522,16 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
         menu->addAction("Reload subscriber emotes",
                         subSeq.isEmpty() ? bothSeq : subSeq, this,
                         &SplitHeader::reloadSubscriberEmotes);
+    }
+    else if (kickChannel)
+    {
+        auto bothSeq = h->getDisplaySequence(
+            HotkeyCategory::Split, "reloadEmotes", {std::vector<QString>()});
+        auto channelSeq = h->getDisplaySequence(HotkeyCategory::Split,
+                                                "reloadEmotes", {{"channel"}});
+        menu->addAction("Reload channel emotes",
+                        channelSeq.isEmpty() ? bothSeq : channelSeq, this,
+                        &SplitHeader::reloadChannelEmotes);
     }
 
     menu->addSeparator();
@@ -1231,6 +1243,11 @@ void SplitHeader::reloadChannelEmotes()
         twitchChannel->refreshFFZChannelEmotes(true);
         twitchChannel->refreshBTTVChannelEmotes(true);
         twitchChannel->refreshSevenTVChannelEmotes(true);
+    }
+    else if (auto *kickChannel = dynamic_cast<KickChannel *>(channel.get()))
+    {
+        kickChannel->refreshKickChannelEmotes(true);
+        kickChannel->refreshSevenTVChannelEmotes(true);
     }
 }
 

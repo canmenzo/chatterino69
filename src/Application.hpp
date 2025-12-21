@@ -49,6 +49,7 @@ class CrashHandler;
 class BttvEmotes;
 class BttvLiveUpdates;
 class FfzEmotes;
+class KickEmotes;
 class SeventvEmotes;
 class SeventvEventAPI;
 class ILinkResolver;
@@ -111,6 +112,7 @@ public:
     virtual BttvEmotes *getBttvEmotes() = 0;
     virtual BttvLiveUpdates *getBttvLiveUpdates() = 0;
     virtual FfzEmotes *getFfzEmotes() = 0;
+    virtual KickEmotes *getKickEmotes() = 0;
     virtual SeventvEmotes *getSeventvEmotes() = 0;
     virtual SeventvEventAPI *getSeventvEventAPI() = 0;
     virtual ILinkResolver *getLinkResolver() = 0;
@@ -182,6 +184,7 @@ private:
     std::unique_ptr<BttvEmotes> bttvEmotes;
     std::unique_ptr<BttvLiveUpdates> bttvLiveUpdates;
     std::unique_ptr<FfzEmotes> ffzEmotes;
+    std::unique_ptr<KickEmotes> kickEmotes;
     std::unique_ptr<SeventvEmotes> seventvEmotes;
     std::unique_ptr<SeventvEventAPI> seventvEventAPI;
     std::unique_ptr<ILinkResolver> linkResolver;
@@ -236,6 +239,7 @@ public:
     BttvEmotes *getBttvEmotes() override;
     BttvLiveUpdates *getBttvLiveUpdates() override;
     FfzEmotes *getFfzEmotes() override;
+    KickEmotes *getKickEmotes() override;
     SeventvEmotes *getSeventvEmotes() override;
     SeventvEventAPI *getSeventvEventAPI() override;
     pronouns::Pronouns *getPronouns() override;

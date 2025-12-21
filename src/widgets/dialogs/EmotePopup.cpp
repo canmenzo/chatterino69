@@ -14,6 +14,8 @@
 #include "providers/bttv/BttvEmotes.hpp"
 #include "providers/emoji/Emojis.hpp"
 #include "providers/ffz/FfzEmotes.hpp"
+#include "providers/kick/KickChannel.hpp"
+#include "providers/kick/KickEmotes.hpp"
 #include "providers/seventv/SeventvEmotes.hpp"
 #include "providers/seventv/SeventvPersonalEmotes.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
@@ -28,6 +30,7 @@
 #include "widgets/Scrollbar.hpp"
 
 #include <QAbstractButton>
+#include <QFile>
 #include <QHBoxLayout>
 #include <QRegularExpression>
 #include <QStringBuilder>
@@ -454,6 +457,7 @@ void EmotePopup::loadChannel(ChannelPtr channel)
 
     this->channel_ = std::move(channel);
     this->twitchChannel_ = dynamic_cast<TwitchChannel *>(this->channel_.get());
+    this->kickChannel_ = dynamic_cast<KickChannel *>(this->channel_.get());
 
     this->setWindowTitle("Emotes in #" + this->channel_->getName());
 
@@ -513,7 +517,34 @@ void EmotePopup::reloadEmotes()
             addEmotes(*subChannel, *map, "7TV");
         }
     }
-    // global
+    // Handle Kick channels - load available Kick emotes and 7TV channel emotes
+    else if (this->kickChannel_)
+    {
+        // Load native Kick emotes that the user can actually use
+        // (filtered by subscription status via the Kick API)
+        if (auto kickEmotes = this->kickChannel_->getAvailableKickEmotes())
+        {
+            if (!kickEmotes->empty())
+            {
+                addEmotes(*channelChannel, *kickEmotes, "Kick");
+            }
+        }
+
+        // Also load 7TV channel emotes for Kick
+        if (Settings::instance().enableSevenTVChannelEmotes)
+        {
+            if (auto seventv = this->kickChannel_->getSeventvEmotes())
+            {
+                addEmotes(*channelChannel, *seventv, "7TV");
+            }
+        }
+
+        // Note: Kick doesn't have native subscription emotes like Twitch
+        // The "Subs" tab will show "no subscription emotes available"
+        // BTTV/FFZ don't have channel-specific emotes for Kick channels yet
+    }
+
+    // global - load for all channel types (Twitch and Kick)
     if (Settings::instance().enableBTTVGlobalEmotes)
     {
         addEmotes(*globalChannel, *getApp()->getBttvEmotes()->emotes(),
@@ -530,6 +561,15 @@ void EmotePopup::reloadEmotes()
                   "7TV");
     }
 
+    // Global Kick emotes (available to everyone on Kick)
+    if (auto kickGlobal = getApp()->getKickEmotes()->globalEmotes())
+    {
+        if (!kickGlobal->empty())
+        {
+            addEmotes(*globalChannel, *kickGlobal, "Kick");
+        }
+    }
+
     if (!subChannel->hasMessages())
     {
         MessageBuilder builder;
@@ -539,6 +579,17 @@ void EmotePopup::reloadEmotes()
                                      MessageElementFlag::Text,
                                      MessageColor::System);
         subChannel->addMessage(builder.release(), MessageContext::Original);
+    }
+
+    if (!channelChannel->hasMessages())
+    {
+        MessageBuilder builder;
+        builder->flags.set(MessageFlag::Centered);
+        builder->flags.set(MessageFlag::DisableCompactEmotes);
+        builder.emplace<TextElement>("no channel emotes available",
+                                     MessageElementFlag::Text,
+                                     MessageColor::System);
+        channelChannel->addMessage(builder.release(), MessageContext::Original);
     }
 }
 
@@ -602,41 +653,63 @@ void EmotePopup::filterTwitchEmotes(std::shared_ptr<Channel> searchChannel,
         addEmotes(*searchChannel, seventvGlobalEmotes, "7TV (Global)");
     }
 
-    if (this->twitchChannel_ == nullptr)
+    // Handle Twitch channel-specific emotes
+    if (this->twitchChannel_ != nullptr)
     {
-        return;
-    }
+        auto bttvChannelEmotes =
+            filterEmoteMap(searchText, this->twitchChannel_->bttvEmotes());
+        auto ffzChannelEmotes =
+            filterEmoteMap(searchText, this->twitchChannel_->ffzEmotes());
+        auto seventvChannelEmotes =
+            filterEmoteMap(searchText, this->twitchChannel_->seventvEmotes());
 
-    auto bttvChannelEmotes =
-        filterEmoteMap(searchText, this->twitchChannel_->bttvEmotes());
-    auto ffzChannelEmotes =
-        filterEmoteMap(searchText, this->twitchChannel_->ffzEmotes());
-    auto seventvChannelEmotes =
-        filterEmoteMap(searchText, this->twitchChannel_->seventvEmotes());
-
-    // channel
-    if (!bttvChannelEmotes.empty())
-    {
-        addEmotes(*searchChannel, bttvChannelEmotes, "BetterTTV (Channel)");
-    }
-    if (!ffzChannelEmotes.empty())
-    {
-        addEmotes(*searchChannel, ffzChannelEmotes, "FrankerFaceZ (Channel)");
-    }
-    if (!seventvChannelEmotes.empty())
-    {
-        addEmotes(*searchChannel, seventvChannelEmotes, "7TV (Channel)");
-    }
-
-    for (const auto &map :
-         getApp()->getSeventvPersonalEmotes()->getEmoteSetsForUser(
-             getApp()->getAccounts()->twitch.getCurrent()->getUserId()))
-    {
-        auto seventvPersonalEmotes = filterEmoteMap(searchText, map);
-        if (!seventvPersonalEmotes.empty())
+        // channel
+        if (!bttvChannelEmotes.empty())
         {
-            addEmotes(*searchChannel, seventvPersonalEmotes,
-                      "SevenTV (Personal)");
+            addEmotes(*searchChannel, bttvChannelEmotes, "BetterTTV (Channel)");
+        }
+        if (!ffzChannelEmotes.empty())
+        {
+            addEmotes(*searchChannel, ffzChannelEmotes, "FrankerFaceZ (Channel)");
+        }
+        if (!seventvChannelEmotes.empty())
+        {
+            addEmotes(*searchChannel, seventvChannelEmotes, "7TV (Channel)");
+        }
+
+        for (const auto &map :
+             getApp()->getSeventvPersonalEmotes()->getEmoteSetsForUser(
+                 getApp()->getAccounts()->twitch.getCurrent()->getUserId()))
+        {
+            auto seventvPersonalEmotes = filterEmoteMap(searchText, map);
+            if (!seventvPersonalEmotes.empty())
+            {
+                addEmotes(*searchChannel, seventvPersonalEmotes,
+                          "SevenTV (Personal)");
+            }
+        }
+    }
+    // Handle Kick channel-specific emotes
+    else if (this->kickChannel_ != nullptr)
+    {
+        // Native Kick emotes (filtered by user's subscription access)
+        if (auto kickEmotes = this->kickChannel_->getAvailableKickEmotes())
+        {
+            auto kickChannelEmotes = filterEmoteMap(searchText, kickEmotes);
+            if (!kickChannelEmotes.empty())
+            {
+                addEmotes(*searchChannel, kickChannelEmotes, "Kick (Channel)");
+            }
+        }
+
+        // 7TV channel emotes
+        if (auto seventv = this->kickChannel_->getSeventvEmotes())
+        {
+            auto seventvChannelEmotes = filterEmoteMap(searchText, seventv);
+            if (!seventvChannelEmotes.empty())
+            {
+                addEmotes(*searchChannel, seventvChannelEmotes, "7TV (Channel)");
+            }
         }
     }
 }
@@ -657,6 +730,60 @@ void EmotePopup::filterEmotes(const QString &searchText)
     if (this->channel_->isTwitchChannel())
     {
         this->filterTwitchEmotes(searchChannel, searchText);
+    }
+    // Handle Kick channel search
+    else if (this->kickChannel_ != nullptr)
+    {
+        // Global emotes (BTTV, FFZ, 7TV)
+        auto bttvGlobalEmotes =
+            filterEmoteMap(searchText, getApp()->getBttvEmotes()->emotes());
+        auto ffzGlobalEmotes =
+            filterEmoteMap(searchText, getApp()->getFfzEmotes()->emotes());
+        auto seventvGlobalEmotes = filterEmoteMap(
+            searchText, getApp()->getSeventvEmotes()->globalEmotes());
+
+        if (!bttvGlobalEmotes.empty())
+        {
+            addEmotes(*searchChannel, bttvGlobalEmotes, "BetterTTV (Global)");
+        }
+        if (!ffzGlobalEmotes.empty())
+        {
+            addEmotes(*searchChannel, ffzGlobalEmotes, "FrankerFaceZ (Global)");
+        }
+        if (!seventvGlobalEmotes.empty())
+        {
+            addEmotes(*searchChannel, seventvGlobalEmotes, "7TV (Global)");
+        }
+
+        // Global Kick emotes
+        if (auto kickGlobal = getApp()->getKickEmotes()->globalEmotes())
+        {
+            auto kickGlobalEmotes = filterEmoteMap(searchText, kickGlobal);
+            if (!kickGlobalEmotes.empty())
+            {
+                addEmotes(*searchChannel, kickGlobalEmotes, "Kick (Global)");
+            }
+        }
+
+        // Native Kick channel emotes (filtered by subscription access)
+        if (auto kickEmotes = this->kickChannel_->getAvailableKickEmotes())
+        {
+            auto kickChannelEmotes = filterEmoteMap(searchText, kickEmotes);
+            if (!kickChannelEmotes.empty())
+            {
+                addEmotes(*searchChannel, kickChannelEmotes, "Kick (Channel)");
+            }
+        }
+
+        // 7TV Channel emotes for Kick
+        if (auto seventv = this->kickChannel_->getSeventvEmotes())
+        {
+            auto seventvChannelEmotes = filterEmoteMap(searchText, seventv);
+            if (!seventvChannelEmotes.empty())
+            {
+                addEmotes(*searchChannel, seventvChannelEmotes, "7TV (Channel)");
+            }
+        }
     }
 
     std::vector<EmojiPtr> filteredEmojis{};

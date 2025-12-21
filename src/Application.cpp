@@ -15,6 +15,7 @@
 #include "providers/bttv/BttvBadges.hpp"
 #include "providers/bttv/BttvEmotes.hpp"
 #include "providers/ffz/FfzEmotes.hpp"
+#include "providers/kick/KickEmotes.hpp"
 #include "providers/links/LinkResolver.hpp"
 #include "providers/pronouns/Pronouns.hpp"
 #include "providers/seventv/SeventvAPI.hpp"
@@ -199,6 +200,7 @@ Application::Application(Settings &_settings, const Paths &paths,
     , bttvEmotes(new BttvEmotes)
     , bttvLiveUpdates(makeBttvLiveUpdates(_settings))
     , ffzEmotes(new FfzEmotes)
+    , kickEmotes(new KickEmotes)
     , seventvEmotes(new SeventvEmotes)
     , seventvEventAPI(makeSeventvEventAPI(_settings))
     , linkResolver(new LinkResolver)
@@ -290,6 +292,7 @@ void Application::initialize(Settings &settings, const Paths &paths)
     // Load global emotes
     this->bttvEmotes->loadEmotes();
     this->ffzEmotes->loadEmotes();
+    this->kickEmotes->loadGlobalEmotes(nullptr);
     this->seventvEmotes->loadGlobalEmotes();
 
     this->twitch->initialize();
@@ -620,6 +623,14 @@ FfzEmotes *Application::getFfzEmotes()
     return this->ffzEmotes.get();
 }
 
+KickEmotes *Application::getKickEmotes()
+{
+    assertInGuiThread();
+    assert(this->kickEmotes);
+
+    return this->kickEmotes.get();
+}
+
 SeventvEmotes *Application::getSeventvEmotes()
 {
     assertInGuiThread();
@@ -690,6 +701,7 @@ void Application::stop()
     this->linkResolver.reset();
     this->seventvEventAPI.reset();
     this->seventvEmotes.reset();
+    this->kickEmotes.reset();
     this->ffzEmotes.reset();
     this->bttvLiveUpdates.reset();
     this->bttvEmotes.reset();

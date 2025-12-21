@@ -43,16 +43,74 @@ void SeventvAPI::getUserByKickID(
     const QString &kickUserID, SuccessCallback<const QJsonObject &> &&onSuccess,
     ErrorCallback &&onError)
 {
+    // Check cache first (read lock)
+    {
+        std::shared_lock lock(this->kickUserCacheMutex_);
+        auto it = this->kickUserCache_.find(kickUserID);
+        if (it != this->kickUserCache_.end())
+        {
+            const auto &entry = it->second;
+            if (!entry.pending)
+            {
+                // We have a cached result
+                if (entry.data.has_value())
+                {
+                    // Found - call success callback
+                    onSuccess(entry.data.value());
+                }
+                // else: 404/not found - silently return (don't call error)
+                return;
+            }
+            // Request is pending, skip making a new one
+            return;
+        }
+    }
+
+    // Mark as pending (write lock)
+    {
+        std::unique_lock lock(this->kickUserCacheMutex_);
+        // Double-check in case another thread already started the request
+        auto it = this->kickUserCache_.find(kickUserID);
+        if (it != this->kickUserCache_.end())
+        {
+            return;  // Already pending or cached
+        }
+        this->kickUserCache_[kickUserID] = KickUserCacheEntry{std::nullopt, true};
+    }
+
     // 7TV supports Kick channels via https://7tv.io/v3/users/KICK/{user_id}
     // Note: Returns a "connection" object, not the full user profile
     NetworkRequest(API_URL_USER_KICK.arg(kickUserID), NetworkRequestType::Get)
         .timeout(20000)
-        .onSuccess(
-            [callback = std::move(onSuccess)](const NetworkResult &result) {
-                auto json = result.parseJson();
-                callback(json);
-            })
-        .onError([callback = std::move(onError)](const NetworkResult &result) {
+        .onSuccess([this, kickUserID,
+                    callback = std::move(onSuccess)](const NetworkResult &result) {
+            auto json = result.parseJson();
+
+            // Cache the successful result
+            {
+                std::unique_lock lock(this->kickUserCacheMutex_);
+                this->kickUserCache_[kickUserID] =
+                    KickUserCacheEntry{json, false};
+            }
+
+            callback(json);
+        })
+        .onError([this, kickUserID,
+                  callback = std::move(onError)](const NetworkResult &result) {
+            // Cache 404s as "not found" to avoid re-requesting
+            if (result.status() == 404)
+            {
+                std::unique_lock lock(this->kickUserCacheMutex_);
+                this->kickUserCache_[kickUserID] =
+                    KickUserCacheEntry{std::nullopt, false};
+            }
+            else
+            {
+                // Other errors - remove from cache so we can retry later
+                std::unique_lock lock(this->kickUserCacheMutex_);
+                this->kickUserCache_.erase(kickUserID);
+            }
+
             callback(result);
         })
         .execute();

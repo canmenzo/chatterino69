@@ -74,8 +74,7 @@ SelectChannelDialog::SelectChannelDialog(QWidget *parent)
                          if (platform == "kick")
                          {
                              ui.channelLabel->setText(
-                                 "Join a Kick channel by username or URL (e.g., "
-                                 "\"xqc\" or \"kick.com/xqc\")");
+                                 "Join a Kick channel by username or URL");
                          }
                          else
                          {
@@ -525,8 +524,7 @@ void SelectChannelDialog::updateKickIntegrationUI()
         if (platform == "kick")
         {
             this->ui_.channelLabel->setText(
-                "Join a Kick channel by username or URL (e.g., "
-                "\"xqc\" or \"kick.com/xqc\")");
+                "Join a Kick channel by username or URL");
         }
         else
         {

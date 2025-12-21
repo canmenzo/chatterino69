@@ -8,6 +8,7 @@
 #include "controllers/commands/CommandController.hpp"
 #include "controllers/hotkeys/HotkeyController.hpp"
 #include "controllers/notifications/NotificationController.hpp"
+#include "providers/kick/KickChannel.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
@@ -1256,6 +1257,11 @@ void Split::reloadChannelAndSubscriberEmotes()
         twitchChannel->refreshBTTVChannelEmotes(true);
         twitchChannel->refreshFFZChannelEmotes(true);
         twitchChannel->refreshSevenTVChannelEmotes(true);
+    }
+    else if (auto *kickChannel = dynamic_cast<KickChannel *>(channel.get()))
+    {
+        kickChannel->refreshKickChannelEmotes(true);
+        kickChannel->refreshSevenTVChannelEmotes(true);
     }
 }
 

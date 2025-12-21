@@ -119,6 +119,21 @@ void KickAccountManager::setCurrentUser(std::shared_ptr<KickAccount> account)
         std::lock_guard<std::mutex> lock(this->mutex_);
         this->currentUser_ = account;
     }
+
+    // Connect to authentication change signals to handle token refresh failures
+    if (account)
+    {
+        std::ignore =
+            account->authenticationChanged.connect([this](bool authenticated) {
+                if (!authenticated)
+                {
+                    qCWarning(chatterinoKick)
+                        << "Authentication expired. Please log in again.";
+                    this->authenticationExpired.invoke();
+                }
+            });
+    }
+
     this->currentUserChanged();
 }
 
@@ -156,8 +171,8 @@ QString KickAccountManager::extractUsernameFromToken(const QString &accessToken)
     }
 
     // Decode the payload (second part)
-    QByteArray payload = QByteArray::fromBase64(
-        parts[1].toUtf8(), QByteArray::Base64UrlEncoding);
+    QByteArray payload = QByteArray::fromBase64(parts[1].toUtf8(),
+                                                QByteArray::Base64UrlEncoding);
 
     QJsonParseError error;
     QJsonDocument doc = QJsonDocument::fromJson(payload, &error);
@@ -194,7 +209,8 @@ QString KickAccountManager::extractUsernameFromToken(const QString &accessToken)
         {
             return sub;
         }
-        qCDebug(chatterinoKick) << "JWT 'sub' claim is numeric (user ID):" << sub;
+        qCDebug(chatterinoKick)
+            << "JWT 'sub' claim is numeric (user ID):" << sub;
     }
 
     qCDebug(chatterinoKick) << "No username found in JWT token";
@@ -220,39 +236,40 @@ void KickAccountManager::fetchUserInfoFromApi(const QString &accessToken)
 
     QNetworkReply *reply = manager->get(request);
 
-    QObject::connect(reply, &QNetworkReply::finished,
-                     [this, reply, manager, accessToken]() {
-        reply->deleteLater();
+    QObject::connect(
+        reply, &QNetworkReply::finished, [this, reply, manager, accessToken]() {
+            reply->deleteLater();
 
-        QByteArray responseData = reply->readAll();
-        int statusCode = reply->attribute(
-                             QNetworkRequest::HttpStatusCodeAttribute)
-                             .toInt();
-        qCDebug(chatterinoKick) << "GET /users response:" << statusCode
-                                << responseData;
+            QByteArray responseData = reply->readAll();
+            int statusCode =
+                reply->attribute(QNetworkRequest::HttpStatusCodeAttribute)
+                    .toInt();
+            qCDebug(chatterinoKick)
+                << "GET /users response:" << statusCode << responseData;
 
-        if (reply->error() == QNetworkReply::NoError && statusCode == 200)
-        {
-            QJsonDocument doc = QJsonDocument::fromJson(responseData);
-            QString username = this->extractUsernameFromResponse(doc);
-            if (!username.isEmpty())
+            if (reply->error() == QNetworkReply::NoError && statusCode == 200)
             {
-                manager->deleteLater();
-                qCDebug(chatterinoKick)
-                    << "Got username from GET /users:" << username;
-                this->createAccountWithUsername(username);
-                return;
+                QJsonDocument doc = QJsonDocument::fromJson(responseData);
+                QString username = this->extractUsernameFromResponse(doc);
+                if (!username.isEmpty())
+                {
+                    manager->deleteLater();
+                    qCDebug(chatterinoKick)
+                        << "Got username from GET /users:" << username;
+                    this->createAccountWithUsername(username);
+                    return;
+                }
             }
-        }
 
-        // Try alternative endpoints as fallback
-        qCDebug(chatterinoKick)
-            << "GET /users failed, trying token introspect as fallback...";
-        this->fetchUserInfoFromIntrospect(accessToken, manager);
-    });
+            // Try alternative endpoints as fallback
+            qCDebug(chatterinoKick)
+                << "GET /users failed, trying token introspect as fallback...";
+            this->fetchUserInfoFromIntrospect(accessToken, manager);
+        });
 }
 
-QString KickAccountManager::extractUsernameFromResponse(const QJsonDocument &doc)
+QString KickAccountManager::extractUsernameFromResponse(
+    const QJsonDocument &doc)
 {
     if (!doc.isObject())
     {
@@ -365,8 +382,7 @@ void KickAccountManager::fetchUserInfoFromIntrospect(
             reply->deleteLater();
 
             QByteArray responseData = reply->readAll();
-            qCDebug(chatterinoKick)
-                << "Introspect response:" << responseData;
+            qCDebug(chatterinoKick) << "Introspect response:" << responseData;
 
             QString username;
 
@@ -410,7 +426,8 @@ void KickAccountManager::fetchUserInfoFromIntrospect(
                         else
                         {
                             qCDebug(chatterinoKick)
-                                << "Introspect 'sub' is numeric (user ID):" << sub;
+                                << "Introspect 'sub' is numeric (user ID):"
+                                << sub;
                         }
                     }
                 }
@@ -426,7 +443,8 @@ void KickAccountManager::fetchUserInfoFromIntrospect(
             }
 
             manager->deleteLater();
-            qCDebug(chatterinoKick) << "Got username from introspect:" << username;
+            qCDebug(chatterinoKick)
+                << "Got username from introspect:" << username;
             this->createAccountWithUsername(username);
         });
 }
@@ -443,36 +461,37 @@ void KickAccountManager::fetchCurrentUser(const QString &accessToken,
 
     QNetworkReply *reply = manager->get(request);
 
-    QObject::connect(reply, &QNetworkReply::finished,
-                     [this, reply, manager, accessToken]() {
-        reply->deleteLater();
+    QObject::connect(
+        reply, &QNetworkReply::finished, [this, reply, manager, accessToken]() {
+            reply->deleteLater();
 
-        QByteArray responseData = reply->readAll();
-        qCDebug(chatterinoKick)
-            << "Current user response:"
-            << reply->attribute(QNetworkRequest::HttpStatusCodeAttribute)
-            << responseData;
+            QByteArray responseData = reply->readAll();
+            qCDebug(chatterinoKick)
+                << "Current user response:"
+                << reply->attribute(QNetworkRequest::HttpStatusCodeAttribute)
+                << responseData;
 
-        QString username;
+            QString username;
 
-        if (reply->error() == QNetworkReply::NoError)
-        {
-            QJsonDocument doc = QJsonDocument::fromJson(responseData);
-            username = this->extractUsernameFromResponse(doc);
-        }
+            if (reply->error() == QNetworkReply::NoError)
+            {
+                QJsonDocument doc = QJsonDocument::fromJson(responseData);
+                username = this->extractUsernameFromResponse(doc);
+            }
 
-        if (username.isEmpty())
-        {
-            // Try one more endpoint - the v2 API
-            qCDebug(chatterinoKick) << "Trying v2 user endpoint...";
-            this->fetchUserV2(accessToken, manager);
-            return;
-        }
+            if (username.isEmpty())
+            {
+                // Try one more endpoint - the v2 API
+                qCDebug(chatterinoKick) << "Trying v2 user endpoint...";
+                this->fetchUserV2(accessToken, manager);
+                return;
+            }
 
-        manager->deleteLater();
-        qCDebug(chatterinoKick) << "Got username from current-user:" << username;
-        this->createAccountWithUsername(username);
-    });
+            manager->deleteLater();
+            qCDebug(chatterinoKick)
+                << "Got username from current-user:" << username;
+            this->createAccountWithUsername(username);
+        });
 }
 
 void KickAccountManager::fetchUserV2(const QString &accessToken,
@@ -487,8 +506,7 @@ void KickAccountManager::fetchUserV2(const QString &accessToken,
 
     QNetworkReply *reply = manager->get(request);
 
-    QObject::connect(reply, &QNetworkReply::finished,
-                     [this, reply, manager]() {
+    QObject::connect(reply, &QNetworkReply::finished, [this, reply, manager]() {
         reply->deleteLater();
         manager->deleteLater();
 
@@ -525,7 +543,8 @@ void KickAccountManager::promptForUsername()
 {
     // Run on main thread since we need to show a dialog
     QMetaObject::invokeMethod(
-        qApp, [this]() {
+        qApp,
+        [this]() {
             bool ok = false;
             QString username = QInputDialog::getText(
                 nullptr, "Kick Username Required",
@@ -536,8 +555,7 @@ void KickAccountManager::promptForUsername()
             if (ok && !username.isEmpty())
             {
                 username = username.trimmed().toLower();
-                qCDebug(chatterinoKick)
-                    << "User entered username:" << username;
+                qCDebug(chatterinoKick) << "User entered username:" << username;
                 this->createAccountWithUsername(username);
             }
             else
@@ -574,4 +592,3 @@ void KickAccountManager::onOAuthFailed(const QString &error)
 }
 
 }  // namespace chatterino
-

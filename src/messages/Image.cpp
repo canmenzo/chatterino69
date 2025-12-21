@@ -495,7 +495,22 @@ QSizeF Image::size() const
 
     if (auto pixmap = this->frames_->first())
     {
-        return pixmap->size().toSizeF() * this->scale_;
+        auto pixmapSize = pixmap->size().toSizeF() * this->scale_;
+
+        // If expectedSize is set and the loaded image is larger than expected,
+        // use expectedSize for display. This handles Kick emotes which provide
+        // high-res images (up to 500x500) that should display at standard size.
+        if (this->expectedSize_.isValid())
+        {
+            auto expectedSize = this->expectedSize_.toSizeF() * this->scale_;
+            if (pixmapSize.width() > expectedSize.width() ||
+                pixmapSize.height() > expectedSize.height())
+            {
+                return expectedSize;
+            }
+        }
+
+        return pixmapSize;
     }
 
     // No frames loaded, use the expected size
@@ -508,6 +523,7 @@ void Image::actuallyLoad()
     NetworkRequest(this->url().string)
         .concurrent()
         .cache()
+        .timeout(60000)  // 60 second timeout for large images (like animated GIFs)
         .onSuccess([weak](auto result) {
             auto shared = weak.lock();
             if (!shared)
@@ -561,14 +577,18 @@ void Image::actuallyLoad()
 
             assignFrames(shared, parsed);
         })
-        .onError([weak](auto /*result*/) {
+        .onError([weak](auto result) {
             auto shared = weak.lock();
             if (!shared)
             {
                 return false;
             }
 
-            // fourtf: is this the right thing to do?
+            qCDebug(chatterinoImage)
+                << "Failed to load image" << shared->url().string
+                << "status:" << result.status().value_or(-1);
+
+            // Mark as empty so it shows as text instead of blank
             shared->empty_ = true;
 
             return true;

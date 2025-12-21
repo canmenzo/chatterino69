@@ -15,6 +15,8 @@
 #include <boost/certify/https_verification.hpp>
 #include <twitch-eventsub-ws/session.hpp>
 
+#include <QFile>
+#include <QDateTime>
 #include <memory>
 #include <utility>
 
@@ -96,43 +98,88 @@ Controller::Controller()
 
 Controller::~Controller()
 {
-    assert(this->quitting && "Application should call setQuitting() before "
-                             "destroying the controller");
+    // Log warning instead of asserting to avoid abort() on shutdown
+    // This makes teardown exception-safe
+    if (!this->quitting)
+    {
+        qCWarning(LOG) << "Controller being destroyed before setQuitting() was "
+                          "called. This may indicate a shutdown order issue.";
+        this->quitting = true;  // Set it now to prevent issues
+    }
 
     qCInfo(LOG) << "Controller dtor start";
 
-    for (const auto &weakConnection : this->connections)
+    // Close all connections safely
+    try
     {
-        auto connection = weakConnection.lock();
-        if (!connection)
+        for (const auto &weakConnection : this->connections)
         {
-            continue;
-        }
+            auto connection = weakConnection.lock();
+            if (!connection)
+            {
+                continue;
+            }
 
-        connection->close();
+            connection->close();
+        }
+    }
+    catch (const std::exception &e)
+    {
+        qCWarning(LOG) << "Exception while closing connections:" << e.what();
     }
 
+    // Clear subscriptions safely
+    try
     {
         std::lock_guard lock(this->subscriptionsMutex);
         this->subscriptions.clear();
     }
+    catch (const std::exception &e)
+    {
+        qCWarning(LOG) << "Exception while clearing subscriptions:" << e.what();
+    }
 
+    // Stop the work guard to allow io_context.run() to return
     this->work.reset();
 
-    if (!this->thread->joinable())
+    if (!this->thread || !this->thread->joinable())
     {
         qCInfo(LOG) << "Controller dtor end (not joinable)";
         return;
     }
 
-    if (this->stoppedFlag.waitFor(250ms))
+    // Wait longer for clean shutdown (up to 1 second total with retries)
+    for (int attempt = 0; attempt < 4; ++attempt)
     {
-        this->thread->join();
-        qCInfo(LOG) << "Controller dtor end (joined)";
-        return;
+        if (this->stoppedFlag.waitFor(250ms))
+        {
+            try
+            {
+                this->thread->join();
+                qCInfo(LOG) << "Controller dtor end (joined after"
+                            << (attempt + 1) << "attempts)";
+            }
+            catch (const std::exception &e)
+            {
+                qCWarning(LOG) << "Exception while joining thread:" << e.what();
+            }
+            return;
+        }
     }
 
-    qCWarning(LOG) << "Controller dtor end (stopped flag didn't stop)";
+    // If we get here, the thread didn't stop in time
+    // Detach to avoid crash - the thread will eventually terminate
+    qCWarning(LOG) << "Controller dtor: thread didn't stop in time, detaching. "
+                      "This may cause issues on shutdown.";
+    try
+    {
+        this->thread->detach();
+    }
+    catch (const std::exception &e)
+    {
+        qCWarning(LOG) << "Exception while detaching thread:" << e.what();
+    }
+    qCInfo(LOG) << "Controller dtor end (detached)";
 }
 
 void Controller::removeRef(const SubscriptionRequest &request)
