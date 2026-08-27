@@ -89,4 +89,3 @@ QString UrlParser::normalizeChannelSlug(const QString &slug)
 }
 
 }  // namespace chatterino
-

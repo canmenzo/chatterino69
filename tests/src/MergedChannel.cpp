@@ -67,8 +67,10 @@ class MergedChannelTest : public ::testing::Test
 protected:
     void SetUp() override
     {
-        twitchChannel = std::make_shared<MockChannel>("testuser", Channel::Type::Twitch);
-        kickChannel = std::make_shared<MockChannel>("testuser", Channel::Type::Kick);
+        twitchChannel =
+            std::make_shared<MockChannel>("testuser", Channel::Type::Twitch);
+        kickChannel =
+            std::make_shared<MockChannel>("testuser", Channel::Type::Kick);
 
         std::vector<ChannelPtr> sources = {twitchChannel, kickChannel};
         mergedChannel = std::make_shared<MergedChannel>("testuser", sources);
@@ -199,7 +201,8 @@ TEST_F(MergedChannelTest, UnmergeReturnsSources)
 
 TEST_F(MergedChannelTest, AddSourceChannel)
 {
-    auto newChannel = std::make_shared<MockChannel>("other", Channel::Type::Twitch);
+    auto newChannel =
+        std::make_shared<MockChannel>("other", Channel::Type::Twitch);
     mergedChannel->addSourceChannel(newChannel);
 
     EXPECT_EQ(mergedChannel->getSourceChannels().size(), 3);

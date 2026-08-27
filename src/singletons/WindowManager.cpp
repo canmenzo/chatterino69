@@ -1,11 +1,11 @@
 #include "singletons/WindowManager.hpp"
 
 #include "Application.hpp"
+#include "channels/MergedChannel.hpp"
 #include "common/Args.hpp"
 #include "common/QLogging.hpp"
 #include "controllers/accounts/AccountController.hpp"
 #include "debug/AssertInGuiThread.hpp"
-#include "channels/MergedChannel.hpp"
 #include "messages/MessageElement.hpp"
 #include "providers/kick/KickAccount.hpp"
 #include "providers/kick/KickApi.hpp"
@@ -239,7 +239,9 @@ void WindowManager::updateWordTypeMask()
     flags.set(settings->showBadgesFfz ? MEF::BadgeFfz : MEF::None);
     flags.set(settings->showBadgesBttv ? MEF::BadgeBttv : MEF::None);
     flags.set(settings->showBadgesSevenTV ? MEF::BadgeSevenTV : MEF::None);
-    flags.set(MEF::BadgePlatform);  // Always show platform badges (Twitch/Kick) in merged channels
+    flags.set(
+        MEF::
+            BadgePlatform);  // Always show platform badges (Twitch/Kick) in merged channels
 
     // username
     flags.set(MEF::Username);
@@ -906,7 +908,8 @@ IndirectChannel WindowManager::decodeChannel(const SplitDescriptor &descriptor)
         if (sourceChannels.size() < 2)
         {
             qCWarning(chatterinoWindowmanager)
-                << "Cannot restore merged channel: need at least 2 valid source channels";
+                << "Cannot restore merged channel: need at least 2 valid "
+                   "source channels";
             // Return the first valid channel if we have one
             if (!sourceChannels.empty())
             {

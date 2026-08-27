@@ -463,11 +463,13 @@ void KickChannel::fetchAvailableEmotes(
                         // Include emote if:
                         // 1. It's not subscriber-only, OR
                         // 2. User has subscriber access
-                        if (!emoteInfo.subscribersOnly || this->hasSubscriberAccess_)
+                        if (!emoteInfo.subscribersOnly ||
+                            this->hasSubscriberAccess_)
                         {
                             // Create emote URL
                             QString emoteUrl =
-                                QString("https://files.kick.com/emotes/%1/fullsize")
+                                QString(
+                                    "https://files.kick.com/emotes/%1/fullsize")
                                     .arg(emoteInfo.id);
 
                             // Create the emote with proper sizing
@@ -476,7 +478,8 @@ void KickChannel::fetchAvailableEmotes(
                                 EmoteName{emoteInfo.name},
                                 ImageSet{Image::fromUrl({emoteUrl}, 1.0,
                                                         KICK_EMOTE_BASE_SIZE)},
-                                Tooltip{QString("%1 Kick Emote").arg(emoteInfo.name)},
+                                Tooltip{QString("%1 Kick Emote")
+                                            .arg(emoteInfo.name)},
                                 Url{emoteUrl},
                                 false,  // not zero-width
                                 EmoteId{QString::number(emoteInfo.id)},

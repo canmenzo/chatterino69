@@ -79,11 +79,13 @@ public:
 
     /// Get available Kick emotes that the user can actually use
     /// This is filtered based on the user's subscription status
-    [[nodiscard]] std::shared_ptr<const EmoteMap> getAvailableKickEmotes() const;
+    [[nodiscard]] std::shared_ptr<const EmoteMap> getAvailableKickEmotes()
+        const;
 
     /// Fetch available emotes from Kick API and filter by user's access
     /// @param callback Called when emotes are loaded (success, count)
-    void fetchAvailableEmotes(std::function<void(bool success, int count)> callback = nullptr);
+    void fetchAvailableEmotes(
+        std::function<void(bool success, int count)> callback = nullptr);
 
     /// Check if user has subscriber access to this channel
     [[nodiscard]] bool hasSubscriberAccess() const;

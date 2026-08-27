@@ -15,7 +15,6 @@
 
 #include <QComboBox>
 #include <QDialogButtonBox>
-#include <QMessageBox>
 #include <QEvent>
 #include <QFormLayout>
 #include <QGroupBox>
@@ -23,6 +22,7 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QTableView>
 #include <QVBoxLayout>
@@ -87,22 +87,23 @@ SelectChannelDialog::SelectChannelDialog(QWidget *parent)
     ui.channelName->setVisible(false);
     layout->addWidget(ui.channelName);
 
-    QObject::connect(ui.channel, &AutoCheckedRadioButton::toggled, this,
-                     [this](bool enabled) {
-                         auto &ui = this->ui_;
-                         ui.channelName->setVisible(enabled);
-                         ui.channelLabel->setVisible(enabled);
+    QObject::connect(
+        ui.channel, &AutoCheckedRadioButton::toggled, this,
+        [this](bool enabled) {
+            auto &ui = this->ui_;
+            ui.channelName->setVisible(enabled);
+            ui.channelLabel->setVisible(enabled);
 
-                         // Show platform selector if Kick integration is enabled
-                         bool kickEnabled = getSettings()->enableKickIntegration;
-                         ui.platformSelector->setVisible(enabled && kickEnabled);
+            // Show platform selector if Kick integration is enabled
+            bool kickEnabled = getSettings()->enableKickIntegration;
+            ui.platformSelector->setVisible(enabled && kickEnabled);
 
-                         if (enabled)
-                         {
-                             ui.channelName->setFocus();
-                             ui.channelName->selectAll();
-                         }
-                     });
+            if (enabled)
+            {
+                ui.channelName->setFocus();
+                ui.channelName->selectAll();
+            }
+        });
 
     ui.channel->installEventFilter(&this->tabFilter_);
     ui.channelName->installEventFilter(&this->tabFilter_);
@@ -295,23 +296,27 @@ IndirectChannel SelectChannelDialog::getSelectedChannel() const
                 msgBox.setText(
                     "Kick integration is currently disabled. Would you like to "
                     "enable it?\n\n"
-                    "You can enable it in Settings → General → Kick Integration.");
+                    "You can enable it in Settings → General → Kick "
+                    "Integration.");
                 msgBox.setIcon(QMessageBox::Question);
-                auto *enableBtn = msgBox.addButton("Open Settings", QMessageBox::AcceptRole);
+                auto *enableBtn =
+                    msgBox.addButton("Open Settings", QMessageBox::AcceptRole);
                 msgBox.addButton("Cancel", QMessageBox::RejectRole);
                 msgBox.exec();
 
                 if (msgBox.clickedButton() == enableBtn)
                 {
                     // Open settings dialog to configure Kick
-                    SettingsDialog::showDialog(nullptr, SettingsDialogPreference::NoPreference);
+                    SettingsDialog::showDialog(
+                        nullptr, SettingsDialogPreference::NoPreference);
                 }
                 return Channel::getEmpty();
             }
 
             // Parse Kick channel from URL or username
             auto parsed = UrlParser::parseKickChannel(channelText);
-            QString kickSlug = parsed.has_value() ? parsed->channelSlug : channelText;
+            QString kickSlug =
+                parsed.has_value() ? parsed->channelSlug : channelText;
 
             // Create KickChannel with account and API for sending messages
             auto kickChannel = std::make_shared<KickChannel>(kickSlug);
@@ -519,8 +524,7 @@ void SelectChannelDialog::updateKickIntegrationUI()
     // Update label based on current platform selection
     if (kickEnabled && channelSelected)
     {
-        QString platform =
-            this->ui_.platformSelector->currentData().toString();
+        QString platform = this->ui_.platformSelector->currentData().toString();
         if (platform == "kick")
         {
             this->ui_.channelLabel->setText(

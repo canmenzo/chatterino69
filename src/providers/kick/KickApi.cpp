@@ -153,8 +153,7 @@ void KickApi::resolveChannelInfo(const QString &channelSlug,
     QNetworkReply *reply = this->networkManager_->get(request);
 
     QObject::connect(
-        reply, &QNetworkReply::finished, this,
-        [reply, callback, channelSlug] {
+        reply, &QNetworkReply::finished, this, [reply, callback, channelSlug] {
             reply->deleteLater();
 
             ChannelInfo info;
@@ -518,58 +517,56 @@ void KickApi::fetchChannelEmotes(
 
     QNetworkReply *reply = this->networkManager_->get(request);
 
-    QObject::connect(reply, &QNetworkReply::finished, this,
-                     [reply, callback, channelSlug] {
-                         reply->deleteLater();
+    QObject::connect(
+        reply, &QNetworkReply::finished, this, [reply, callback, channelSlug] {
+            reply->deleteLater();
 
-                         ChannelEmotesResult result;
-                         result.channelSlug = channelSlug;
+            ChannelEmotesResult result;
+            result.channelSlug = channelSlug;
 
-                         if (reply->error() != QNetworkReply::NoError)
-                         {
-                             result.errorMessage = reply->errorString();
-                             qCWarning(chatterinoKick)
-                                 << "Failed to fetch emotes for" << channelSlug
-                                 << ":" << result.errorMessage;
-                             callback(result);
-                             return;
-                         }
+            if (reply->error() != QNetworkReply::NoError)
+            {
+                result.errorMessage = reply->errorString();
+                qCWarning(chatterinoKick)
+                    << "Failed to fetch emotes for" << channelSlug << ":"
+                    << result.errorMessage;
+                callback(result);
+                return;
+            }
 
-                         QByteArray responseData = reply->readAll();
-                         QJsonDocument doc = QJsonDocument::fromJson(responseData);
+            QByteArray responseData = reply->readAll();
+            QJsonDocument doc = QJsonDocument::fromJson(responseData);
 
-                         if (!doc.isArray() || doc.array().isEmpty())
-                         {
-                             result.errorMessage = "Invalid emotes response";
-                             qCWarning(chatterinoKick)
-                                 << "Invalid emotes response for" << channelSlug;
-                             callback(result);
-                             return;
-                         }
+            if (!doc.isArray() || doc.array().isEmpty())
+            {
+                result.errorMessage = "Invalid emotes response";
+                qCWarning(chatterinoKick)
+                    << "Invalid emotes response for" << channelSlug;
+                callback(result);
+                return;
+            }
 
-                         // Response is: [{ ..., "emotes": [...] }]
-                         QJsonObject channelObj = doc.array().first().toObject();
-                         QJsonArray emotesArray = channelObj["emotes"].toArray();
+            // Response is: [{ ..., "emotes": [...] }]
+            QJsonObject channelObj = doc.array().first().toObject();
+            QJsonArray emotesArray = channelObj["emotes"].toArray();
 
-                         result.emotes.reserve(emotesArray.size());
-                         for (const auto &emoteVal : emotesArray)
-                         {
-                             QJsonObject emoteObj = emoteVal.toObject();
-                             KickEmoteInfo emote;
-                             emote.id = emoteObj["id"].toInt();
-                             emote.name = emoteObj["name"].toString();
-                             emote.subscribersOnly =
-                                 emoteObj["subscribers_only"].toBool();
-                             result.emotes.push_back(emote);
-                         }
+            result.emotes.reserve(emotesArray.size());
+            for (const auto &emoteVal : emotesArray)
+            {
+                QJsonObject emoteObj = emoteVal.toObject();
+                KickEmoteInfo emote;
+                emote.id = emoteObj["id"].toInt();
+                emote.name = emoteObj["name"].toString();
+                emote.subscribersOnly = emoteObj["subscribers_only"].toBool();
+                result.emotes.push_back(emote);
+            }
 
-                         result.success = true;
-                         qCDebug(chatterinoKick)
-                             << "Fetched" << result.emotes.size()
-                             << "emotes for channel" << channelSlug;
+            result.success = true;
+            qCDebug(chatterinoKick) << "Fetched" << result.emotes.size()
+                                    << "emotes for channel" << channelSlug;
 
-                         callback(result);
-                     });
+            callback(result);
+        });
 }
 
 void KickApi::fetchUserRoleInChannel(
@@ -578,8 +575,8 @@ void KickApi::fetchUserRoleInChannel(
 {
     // Public endpoint: https://kick.com/api/v2/channels/{channel}
     // Returns: { ..., "role": null | "subscriber" | "moderator" | "broadcaster" }
-    QString url =
-        QString("%1/channels/%2").arg(QString::fromLatin1(KICK_CHANNEL_API), channelSlug);
+    QString url = QString("%1/channels/%2")
+                      .arg(QString::fromLatin1(KICK_CHANNEL_API), channelSlug);
 
     qCDebug(chatterinoKick) << "Fetching user role in channel:" << channelSlug;
 
@@ -592,60 +589,60 @@ void KickApi::fetchUserRoleInChannel(
 
     QNetworkReply *reply = this->networkManager_->get(request);
 
-    QObject::connect(reply, &QNetworkReply::finished, this,
-                     [reply, callback, channelSlug] {
-                         reply->deleteLater();
+    QObject::connect(
+        reply, &QNetworkReply::finished, this, [reply, callback, channelSlug] {
+            reply->deleteLater();
 
-                         UserRoleResult result;
-                         result.channelSlug = channelSlug;
+            UserRoleResult result;
+            result.channelSlug = channelSlug;
 
-                         if (reply->error() != QNetworkReply::NoError)
-                         {
-                             result.errorMessage = reply->errorString();
-                             qCWarning(chatterinoKick)
-                                 << "Failed to fetch role in" << channelSlug
-                                 << ":" << result.errorMessage;
-                             callback(result);
-                             return;
-                         }
+            if (reply->error() != QNetworkReply::NoError)
+            {
+                result.errorMessage = reply->errorString();
+                qCWarning(chatterinoKick)
+                    << "Failed to fetch role in" << channelSlug << ":"
+                    << result.errorMessage;
+                callback(result);
+                return;
+            }
 
-                         QByteArray responseData = reply->readAll();
-                         QJsonDocument doc = QJsonDocument::fromJson(responseData);
+            QByteArray responseData = reply->readAll();
+            QJsonDocument doc = QJsonDocument::fromJson(responseData);
 
-                         if (!doc.isObject())
-                         {
-                             result.errorMessage = "Invalid channel response";
-                             qCWarning(chatterinoKick)
-                                 << "Invalid channel response for" << channelSlug;
-                             callback(result);
-                             return;
-                         }
+            if (!doc.isObject())
+            {
+                result.errorMessage = "Invalid channel response";
+                qCWarning(chatterinoKick)
+                    << "Invalid channel response for" << channelSlug;
+                callback(result);
+                return;
+            }
 
-                         QJsonObject obj = doc.object();
+            QJsonObject obj = doc.object();
 
-                         // Extract role field
-                         // null = no special role (not subscribed)
-                         // "subscriber", "moderator", "broadcaster" = has access
-                         if (obj["role"].isNull())
-                         {
-                             result.role = QString();
-                             result.isSubscribed = false;
-                         }
-                         else
-                         {
-                             result.role = obj["role"].toString();
-                             // Any non-null role grants subscriber emote access
-                             result.isSubscribed = !result.role.isEmpty();
-                         }
+            // Extract role field
+            // null = no special role (not subscribed)
+            // "subscriber", "moderator", "broadcaster" = has access
+            if (obj["role"].isNull())
+            {
+                result.role = QString();
+                result.isSubscribed = false;
+            }
+            else
+            {
+                result.role = obj["role"].toString();
+                // Any non-null role grants subscriber emote access
+                result.isSubscribed = !result.role.isEmpty();
+            }
 
-                         result.success = true;
-                         qCDebug(chatterinoKick)
-                             << "User role in" << channelSlug << ":"
-                             << (result.role.isEmpty() ? "none" : result.role)
-                             << "- isSubscribed:" << result.isSubscribed;
+            result.success = true;
+            qCDebug(chatterinoKick)
+                << "User role in" << channelSlug << ":"
+                << (result.role.isEmpty() ? "none" : result.role)
+                << "- isSubscribed:" << result.isSubscribed;
 
-                         callback(result);
-                     });
+            callback(result);
+        });
 }
 
 }  // namespace chatterino

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <pajlada/signals/signal.hpp>
-
 #include <QDateTime>
 #include <QObject>
 #include <QString>
@@ -54,7 +53,8 @@ public:
         "https://id.kick.com/oauth/authorize";
     static constexpr const char *KICK_TOKEN_URL =
         "https://id.kick.com/oauth/token";
-    static constexpr const char *REDIRECT_URI = "http://localhost:52847/callback";
+    static constexpr const char *REDIRECT_URI =
+        "http://localhost:52847/callback";
     static constexpr int LOCAL_SERVER_PORT = 52847;
 
 private Q_SLOTS:
@@ -99,4 +99,3 @@ private:
 };
 
 }  // namespace chatterino
-

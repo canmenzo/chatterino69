@@ -142,7 +142,8 @@ public:
     struct UserRoleResult {
         bool success{false};
         QString channelSlug;
-        QString role;  // empty = no role, "subscriber", "moderator", "broadcaster", etc.
+        QString
+            role;  // empty = no role, "subscriber", "moderator", "broadcaster", etc.
         bool isSubscribed{false};  // true if role indicates subscription access
         QString errorMessage;
     };
