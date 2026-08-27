@@ -27,6 +27,7 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <memory>
 
 namespace chatterino {
 
@@ -225,8 +226,11 @@ void KickChannel::reconnect()
     // Reset reconnection attempts on manual reconnect
     this->reconnectAttempts_ = 0;
 
-    QTimer::singleShot(1000, [this] {
-        this->connect();
+    QTimer::singleShot(1000, [weak{this->weak_from_this()}] {
+        if (auto self = std::dynamic_pointer_cast<KickChannel>(weak.lock()))
+        {
+            self->connect();
+        }
     });
 }
 
@@ -756,12 +760,18 @@ void KickChannel::scheduleReconnect()
             .arg(this->reconnectAttempts_)
             .arg(MAX_RECONNECT_ATTEMPTS));
 
-    QTimer::singleShot(delayMs, [this] {
-        if (this->connectionState_ == KickConnectionState::Reconnecting)
+    QTimer::singleShot(delayMs, [weak{this->weak_from_this()}] {
+        auto self = std::dynamic_pointer_cast<KickChannel>(weak.lock());
+        if (!self)
         {
-            this->addSystemMessage(QStringLiteral("Reconnecting..."));
-            this->disconnect();
-            this->connect();
+            return;
+        }
+
+        if (self->connectionState_ == KickConnectionState::Reconnecting)
+        {
+            self->addSystemMessage(QStringLiteral("Reconnecting..."));
+            self->disconnect();
+            self->connect();
         }
     });
 }
