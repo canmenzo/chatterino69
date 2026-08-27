@@ -979,7 +979,8 @@ void GeneralPage::initLayout(GeneralPageView &layout)
         layout.addLayout(kickAccountLayout);
 
         // Update UI based on Kick integration state
-        auto updateKickUI = [kickLoginButton, kickLogoutButton, kickStatusLabel] {
+        auto updateKickUI = [kickLoginButton, kickLogoutButton,
+                             kickStatusLabel] {
             auto *app = getApp();
             bool enabled = getSettings()->enableKickIntegration;
             bool loggedIn = app->getAccounts()->kick.isLoggedIn();
@@ -996,8 +997,10 @@ void GeneralPage::initLayout(GeneralPageView &layout)
             }
             else if (loggedIn)
             {
-                QString username = app->getAccounts()->kick.getCurrentUsername();
-                kickStatusLabel->setText(QString("Logged in as: %1").arg(username));
+                QString username =
+                    app->getAccounts()->kick.getCurrentUsername();
+                kickStatusLabel->setText(
+                    QString("Logged in as: %1").arg(username));
                 kickStatusLabel->setStyleSheet("color: #53fc18;");
             }
             else
@@ -1024,10 +1027,11 @@ void GeneralPage::initLayout(GeneralPageView &layout)
         });
 
         // Logout button
-        QObject::connect(kickLogoutButton, &QPushButton::clicked, [updateKickUI] {
-            getApp()->getAccounts()->kick.logout();
-            updateKickUI();
-        });
+        QObject::connect(kickLogoutButton, &QPushButton::clicked,
+                         [updateKickUI] {
+                             getApp()->getAccounts()->kick.logout();
+                             updateKickUI();
+                         });
 
         // Login result signals
         std::ignore = getApp()->getAccounts()->kick.loginSucceeded.connect(
@@ -1037,7 +1041,8 @@ void GeneralPage::initLayout(GeneralPageView &layout)
 
         std::ignore = getApp()->getAccounts()->kick.loginFailed.connect(
             [kickStatusLabel](const QString &error) {
-                kickStatusLabel->setText(QString("Login failed: %1").arg(error));
+                kickStatusLabel->setText(
+                    QString("Login failed: %1").arg(error));
                 kickStatusLabel->setStyleSheet("color: #ff4444;");
             });
     }

@@ -77,4 +77,3 @@ TEST(KickConnectionState, enumValuesExist)
     EXPECT_NE(static_cast<int>(connected), static_cast<int>(reconnecting));
     EXPECT_NE(static_cast<int>(reconnecting), static_cast<int>(failed));
 }
-

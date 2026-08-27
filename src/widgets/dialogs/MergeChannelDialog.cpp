@@ -15,7 +15,8 @@
 
 namespace chatterino {
 
-MergeChannelDialog::MergeChannelDialog(ChannelPtr sourceChannel, QWidget *parent)
+MergeChannelDialog::MergeChannelDialog(ChannelPtr sourceChannel,
+                                       QWidget *parent)
     : QDialog(parent)
     , sourceChannel_(std::move(sourceChannel))
 {
@@ -115,8 +116,8 @@ void MergeChannelDialog::setupUI()
     // Single view option (combined chat)
     this->singleViewRadio_ = new QRadioButton("Combined view (single panel)");
     this->singleViewRadio_->setChecked(true);
-    this->mergeTypeGroup_->addButton(this->singleViewRadio_,
-                                     static_cast<int>(MergeViewType::SingleView));
+    this->mergeTypeGroup_->addButton(
+        this->singleViewRadio_, static_cast<int>(MergeViewType::SingleView));
     this->mainLayout_->addWidget(this->singleViewRadio_);
 
     this->singleViewDescription_ = new QLabel(
@@ -127,8 +128,8 @@ void MergeChannelDialog::setupUI()
 
     // Split view option (side-by-side)
     this->splitViewRadio_ = new QRadioButton("Side-by-side view (two panels)");
-    this->mergeTypeGroup_->addButton(this->splitViewRadio_,
-                                     static_cast<int>(MergeViewType::SplitView));
+    this->mergeTypeGroup_->addButton(
+        this->splitViewRadio_, static_cast<int>(MergeViewType::SplitView));
     this->mainLayout_->addWidget(this->splitViewRadio_);
 
     this->splitViewDescription_ = new QLabel(
@@ -179,14 +180,16 @@ void MergeChannelDialog::updateSuggestion()
     else if (inputText == sourceChannelName)
     {
         this->suggestionLabel_->setText("✓ Matching username detected");
-        this->suggestionLabel_->setStyleSheet("color: #53fc18; font-style: italic;");
+        this->suggestionLabel_->setStyleSheet(
+            "color: #53fc18; font-style: italic;");
     }
     else
     {
         this->suggestionLabel_->setText(
             QString("Note: Merging '%1' with '%2'")
                 .arg(this->sourceChannel_->getName(), inputText));
-        this->suggestionLabel_->setStyleSheet("color: #888; font-style: italic;");
+        this->suggestionLabel_->setStyleSheet(
+            "color: #888; font-style: italic;");
     }
 }
 
@@ -243,7 +246,8 @@ void MergeChannelDialog::onMergeClicked()
             this->onMergeCallback_)
         {
             // Combined view - create a MergedChannel
-            this->onMergeCallback_(this->sourceChannel_, this->selectedChannel_);
+            this->onMergeCallback_(this->sourceChannel_,
+                                   this->selectedChannel_);
         }
         else if (this->mergeViewType_ == MergeViewType::SplitView &&
                  this->onSplitViewCallback_)
@@ -258,4 +262,3 @@ void MergeChannelDialog::onMergeClicked()
 }
 
 }  // namespace chatterino
-

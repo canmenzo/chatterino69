@@ -18,10 +18,10 @@
 #include "messages/MessageElement.hpp"
 #include "messages/MessageThread.hpp"
 #include "providers/colors/ColorProvider.hpp"
+#include "providers/kick/KickChannel.hpp"
 #include "providers/links/LinkInfo.hpp"
 #include "providers/links/LinkResolver.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
-#include "providers/kick/KickChannel.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/Resources.hpp"
@@ -1102,8 +1102,7 @@ void ChannelView::setChannel(const ChannelPtr &underlyingChannel)
     }
 
     // Notifications - Kick live status
-    auto *kickChannel =
-        dynamic_cast<KickChannel *>(underlyingChannel.get());
+    auto *kickChannel = dynamic_cast<KickChannel *>(underlyingChannel.get());
     if (kickChannel != nullptr)
     {
         this->channelConnections_.managedConnect(

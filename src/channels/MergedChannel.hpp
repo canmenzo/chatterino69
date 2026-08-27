@@ -4,7 +4,6 @@
 
 #include <pajlada/signals/signal.hpp>
 #include <pajlada/signals/signalholder.hpp>
-
 #include <QString>
 
 #include <chrono>
@@ -111,4 +110,3 @@ private:
 };
 
 }  // namespace chatterino
-

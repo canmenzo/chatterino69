@@ -961,9 +961,8 @@ void UserInfoPopup::updateUserData()
         this->ui_.userIDLabel->setProperty("copy-text", this->userName_);
 
         // Use the Kick platform icon as avatar for Kick users
-        this->ui_.avatarButton->setPixmap(
-            getResources().platforms.kick.scaled(64, 64, Qt::KeepAspectRatio,
-                                                  Qt::SmoothTransformation));
+        this->ui_.avatarButton->setPixmap(getResources().platforms.kick.scaled(
+            64, 64, Qt::KeepAspectRatio, Qt::SmoothTransformation));
 
         // Hide Twitch-specific UI elements for Kick users
         this->ui_.localizedNameLabel->setVisible(false);

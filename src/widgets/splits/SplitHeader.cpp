@@ -1,6 +1,7 @@
 #include "widgets/splits/SplitHeader.hpp"
 
 #include "Application.hpp"
+#include "channels/MergedChannel.hpp"
 #include "common/network/NetworkCommon.hpp"
 #include "common/network/NetworkRequest.hpp"
 #include "common/network/NetworkResult.hpp"
@@ -10,12 +11,10 @@
 #include "controllers/hotkeys/HotkeyCategory.hpp"
 #include "controllers/hotkeys/HotkeyController.hpp"
 #include "controllers/notifications/NotificationController.hpp"
-#include "channels/MergedChannel.hpp"
 #include "providers/kick/KickChannel.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
-#include "widgets/dialogs/MergeChannelDialog.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/StreamerMode.hpp"
 #include "singletons/Theme.hpp"
@@ -25,6 +24,7 @@
 #include "widgets/buttons/DrawnButton.hpp"
 #include "widgets/buttons/LabelButton.hpp"
 #include "widgets/buttons/SvgButton.hpp"
+#include "widgets/dialogs/MergeChannelDialog.hpp"
 #include "widgets/dialogs/SettingsDialog.hpp"
 #include "widgets/helper/CommonTexts.hpp"
 #include "widgets/Label.hpp"
@@ -540,15 +540,16 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
     if (getSettings()->enableKickIntegration)
     {
         auto *mergeAction = menu->addAction("Merge with...", this, [this]() {
-            auto *dialog = new MergeChannelDialog(
-                this->split_->getChannel(), this);
+            auto *dialog =
+                new MergeChannelDialog(this->split_->getChannel(), this);
 
             // Single view (combined) - creates a MergedChannel
             dialog->setOnMerge([this](ChannelPtr source, ChannelPtr target) {
                 // Create merged channel
                 std::vector<ChannelPtr> sources = {source, target};
                 auto mergedChannel = std::make_shared<MergedChannel>(
-                    QString("%1 + %2").arg(source->getName(), target->getName()),
+                    QString("%1 + %2").arg(source->getName(),
+                                           target->getName()),
                     sources);
 
                 // Replace current split with merged channel
@@ -557,11 +558,12 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
             });
 
             // Split view (side-by-side) - opens target in new split
-            dialog->setOnSplitView([this](ChannelPtr source, ChannelPtr target) {
-                Q_UNUSED(source);
-                // Keep current channel, just open the target in a new split next to it
-                this->split_->openSplitRequested.invoke(target);
-            });
+            dialog->setOnSplitView(
+                [this](ChannelPtr source, ChannelPtr target) {
+                    Q_UNUSED(source);
+                    // Keep current channel, just open the target in a new split next to it
+                    this->split_->openSplitRequested.invoke(target);
+                });
 
             dialog->setAttribute(Qt::WA_DeleteOnClose);
             dialog->show();
@@ -1016,9 +1018,10 @@ void SplitHeader::updateChannelText()
                 break;
         }
         title = "Kick: " + title + statusText;
-        this->tooltipText_ = QString("Kick channel: %1\nStatus: %2")
-                                 .arg(kickChannel->getChannelSlug())
-                                 .arg(statusText.trimmed().mid(1, statusText.length() - 2));
+        this->tooltipText_ =
+            QString("Kick channel: %1\nStatus: %2")
+                .arg(kickChannel->getChannelSlug())
+                .arg(statusText.trimmed().mid(1, statusText.length() - 2));
     }
 
     if (!title.isEmpty() && !this->split_->getFilters().empty())
