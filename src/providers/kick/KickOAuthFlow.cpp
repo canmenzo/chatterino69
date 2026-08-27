@@ -21,6 +21,14 @@ namespace chatterino {
 KickOAuthFlow::KickOAuthFlow(QObject *parent)
     : QObject(parent)
 {
+    this->timeoutTimer_.setSingleShot(true);
+    QObject::connect(&this->timeoutTimer_, &QTimer::timeout, this, [this] {
+        qCWarning(chatterinoKick) << "OAuth flow timed out waiting for the "
+                                     "browser callback";
+        this->cancel();
+        this->authenticationFailed.invoke(
+            "Timed out waiting for Kick authorization");
+    });
 }
 
 KickOAuthFlow::~KickOAuthFlow()
@@ -60,12 +68,14 @@ bool KickOAuthFlow::start()
     }
 
     this->isInProgress_ = true;
+    this->timeoutTimer_.start(AUTH_TIMEOUT_MS);
     qCDebug(chatterinoKick) << "OAuth flow started, waiting for callback...";
     return true;
 }
 
 void KickOAuthFlow::cancel()
 {
+    this->timeoutTimer_.stop();
     this->stopLocalServer();
     this->isInProgress_ = false;
     this->codeVerifier_.clear();
@@ -516,6 +526,7 @@ void KickOAuthFlow::exchangeCodeForTokens(const QString &code)
                     << "Ensure this scope is enabled in your Kick developer "
                        "app settings.";
             }
+            this->timeoutTimer_.stop();
             this->isInProgress_ = false;
             this->stopLocalServer();
             this->authenticationSuccess.invoke(tokens);
