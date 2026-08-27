@@ -58,6 +58,7 @@ A new merged view will open showing messages from both platforms with platform i
 When viewing a merged channel, you can choose where to send your messages:
 
 1. Look for the platform selection buttons above the message input:
+
    - **Both** - Send to both Twitch and Kick
    - **Twitch** - Send only to Twitch
    - **Kick** - Send only to Kick
