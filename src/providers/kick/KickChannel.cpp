@@ -13,6 +13,7 @@
 #include "providers/ffz/FfzEmotes.hpp"
 #include "providers/kick/KickAccount.hpp"
 #include "providers/kick/KickApi.hpp"
+#include "providers/kick/KickBadges.hpp"
 #include "providers/kick/KickEmotes.hpp"
 #include "providers/kick/KickWebSocket.hpp"
 #include "providers/seventv/SeventvAPI.hpp"
@@ -531,8 +532,11 @@ void KickChannel::onMessageReceived(const KickMessage &kickMessage)
     // Add badges (if any)
     for (const auto &badge : kickMessage.sender.identity.badges)
     {
-        // TODO: Add proper native Kick badge rendering
-        Q_UNUSED(badge);
+        auto [emote, flag] = KickBadges::lookup(badge.type);
+        if (emote)
+        {
+            builder.emplace<BadgeElement>(emote, flag);
+        }
     }
 
     // Load 7TV cosmetics (paints, badges) for this user if we haven't already
