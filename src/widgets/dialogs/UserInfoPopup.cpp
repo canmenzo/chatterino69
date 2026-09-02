@@ -19,6 +19,7 @@
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
+#include "providers/twitch/TwitchNameHistory.hpp"
 #include "singletons/Resources.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/StreamerMode.hpp"
@@ -46,6 +47,7 @@
 #include <QCheckBox>
 #include <QDesktopServices>
 #include <QFile>
+#include <QMenu>
 #include <QMessageBox>
 #include <QMetaEnum>
 #include <QMovie>
@@ -475,6 +477,9 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
             .assign(&this->ui_.notesAdd);
         auto usercard = user.emplace<LabelButton>("Usercard", this)
                             .assign(&this->ui_.usercardLabel);
+        auto names = user.emplace<LabelButton>("Names", this)
+                         .assign(&this->ui_.nameHistory);
+        names->setVisible(false);
         auto mod = user.emplace<PixmapButton>(this);
         mod->setPixmap(getResources().buttons.mod);
         mod->setScaleIndependentSize(30, 30);
@@ -494,6 +499,10 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
             QDesktopServices::openUrl("https://www.twitch.tv/popout/" +
                                       this->underlyingChannel_->getName() +
                                       "/viewercard/" + this->userName_);
+        });
+
+        QObject::connect(names.getElement(), &Button::leftClicked, [this] {
+            this->showNameHistoryMenu();
         });
 
         QObject::connect(mod.getElement(), &Button::leftClicked, [this] {
@@ -1010,6 +1019,7 @@ void UserInfoPopup::updateUserData()
         }
 
         this->userId_ = user.id;
+        this->updateNameHistoryButton();
         this->helixAvatarUrl_ = user.profileImageUrl;
         this->updateAvatarUrl();
         this->updateNotes();
@@ -1511,6 +1521,96 @@ void UserInfoPopup::updateAvatarUrl()
     {
         this->avatarUrl_ = this->seventvAvatarUrl_;
     }
+}
+
+void UserInfoPopup::updateNameHistoryButton()
+{
+    if (this->ui_.nameHistory == nullptr)
+    {
+        return;
+    }
+
+    // name history is Twitch only, and needs the id we resolve asynchronously
+    this->ui_.nameHistory->setVisible(
+        getSettings()->showUsercardNameHistoryButton &&
+        !this->userId_.isEmpty());
+}
+
+void UserInfoPopup::showNameHistoryMenu()
+{
+    if (this->userId_.isEmpty())
+    {
+        return;
+    }
+
+    auto *menu = new QMenu(this);
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+
+    auto show = [menu, this](const QString &text) {
+        menu->clear();
+        menu->addAction(text)->setEnabled(false);
+        if (menu->isVisible())
+        {
+            menu->adjustSize();
+        }
+        else
+        {
+            menu->popup(QCursor::pos());
+        }
+    };
+
+    auto render = [menu, show](const TwitchNameHistory &history) {
+        if (history.entries.empty())
+        {
+            show("No name history found");
+            return;
+        }
+
+        menu->clear();
+        for (const auto &entry : history.entries)
+        {
+            auto *action =
+                menu->addAction(entry.login + " (" + entry.firstSeen + " to " +
+                                entry.lastSeen + ")");
+            QObject::connect(action, &QAction::triggered,
+                             [login = entry.login] {
+                                 crossPlatformCopy(login);
+                             });
+        }
+
+        if (menu->isVisible())
+        {
+            menu->adjustSize();
+        }
+        else
+        {
+            menu->popup(QCursor::pos());
+        }
+    };
+
+    if (auto cached = getCachedTwitchNameHistory(this->userId_))
+    {
+        render(*cached);
+        return;
+    }
+
+    show("Fetching name history...");
+
+    QPointer<QMenu> guard(menu);
+    fetchTwitchNameHistory(
+        this->userId_, this->userName_,
+        [guard, render](const TwitchNameHistory &history) {
+            if (guard)
+            {
+                render(history);
+            }
+        },
+        [guard, show](const QString &error) {
+            if (guard)
+            {
+                show("Name history unavailable: " + error);
+            }
+        });
 }
 
 }  // namespace chatterino
