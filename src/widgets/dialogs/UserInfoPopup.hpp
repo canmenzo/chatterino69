@@ -66,6 +66,9 @@ private:
 
     void updateAvatarUrl();
 
+    void showNameHistoryMenu();
+    void updateNameHistoryButton();
+
     bool isMod_{};
     bool isBroadcaster_{};
 
@@ -118,6 +121,7 @@ private:
         ChannelView *latestMessages = nullptr;
 
         LabelButton *usercardLabel = nullptr;
+        LabelButton *nameHistory = nullptr;
         LabelButton *switchAvatars = nullptr;
     } ui_;
 

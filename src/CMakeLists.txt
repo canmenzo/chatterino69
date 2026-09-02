@@ -470,6 +470,8 @@ set(SOURCE_FILES
         providers/twitch/TwitchIrc.cpp
         providers/twitch/TwitchIrc.hpp
         providers/twitch/TwitchIrcServer.cpp
+        providers/twitch/TwitchNameHistory.cpp
+        providers/twitch/TwitchNameHistory.hpp
         providers/twitch/TwitchIrcServer.hpp
         providers/twitch/TwitchUser.cpp
         providers/twitch/TwitchUser.hpp

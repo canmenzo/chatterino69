@@ -651,6 +651,10 @@ public:
     /// Kick Integration
     BoolSetting enableKickIntegration = {"/kick/enabled", false};
 
+    /// Usercard
+    BoolSetting showUsercardNameHistoryButton = {
+        "/usercard/showNameHistoryButton", true};
+
     /// External tools
     // Streamlink
     BoolSetting streamlinkUseCustomPath = {"/external/streamlink/useCustomPath",
