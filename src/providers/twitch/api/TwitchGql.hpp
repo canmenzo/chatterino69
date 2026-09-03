@@ -4,6 +4,7 @@
 #include <QString>
 
 #include <functional>
+#include <vector>
 
 namespace chatterino {
 
@@ -34,6 +35,14 @@ QString unavailableReason();
 using SuccessCallback = std::function<void(const QJsonObject &data)>;
 using FailureCallback = std::function<void(const QString &error)>;
 
+/// Which of Twitch's own clients to present as. Some operations are only
+/// served to one of them: channel points want the TV client, the rest the web
+/// one.
+enum class Client {
+    Web,
+    AndroidTV,
+};
+
 /// Runs a persisted query by its operation name and hash.
 ///
 /// @a onFailure receives Twitch's own error message where there is one, since
@@ -41,12 +50,12 @@ using FailureCallback = std::function<void(const QString &error)>;
 /// old, prediction already locked).
 void persistedQuery(const QString &operationName, const QString &sha256Hash,
                     const QJsonObject &variables, SuccessCallback onSuccess,
-                    FailureCallback onFailure);
+                    FailureCallback onFailure, Client client = Client::Web);
 
 /// Runs a GraphQL document directly, for operations with no stable hash.
 void query(const QString &operationName, const QString &document,
            const QJsonObject &variables, SuccessCallback onSuccess,
-           FailureCallback onFailure);
+           FailureCallback onFailure, Client client = Client::Web);
 
 /// Pulls the first error message out of a GraphQL response, if any.
 QString firstError(const QJsonObject &response);
@@ -60,6 +69,29 @@ void voteInPoll(const QString &pollId, const QString &choiceId,
 void makePrediction(const QString &eventId, const QString &outcomeId,
                     int points, std::function<void()> onSuccess,
                     FailureCallback onFailure);
+
+struct ChannelPointReward {
+    QString id;
+    QString title;
+    QString prompt;
+    int cost = 0;
+    /// True when redeeming it asks the viewer for text.
+    bool needsInput = false;
+};
+
+/// Reads the viewer's point balance and the rewards they can redeem here.
+void channelPointsContext(
+    const QString &channelLogin,
+    std::function<void(qint64 balance, std::vector<ChannelPointReward>)>
+        onSuccess,
+    FailureCallback onFailure);
+
+/// Redeems a reward, optionally with the text it asked for.
+void redeemChannelPointReward(const QString &channelId,
+                              const ChannelPointReward &reward,
+                              const QString &textInput,
+                              std::function<void()> onSuccess,
+                              FailureCallback onFailure);
 
 }  // namespace gql
 
