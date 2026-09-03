@@ -19,6 +19,7 @@
 #include "singletons/StreamerMode.hpp"
 #include "singletons/Theme.hpp"
 #include "singletons/WindowManager.hpp"
+#include "util/FormatTime.hpp"
 #include "util/Helpers.hpp"
 #include "util/LayoutHelper.hpp"
 #include "widgets/buttons/DrawnButton.hpp"
@@ -860,6 +861,42 @@ void SplitHeader::updateRoomModes()
         }
 
         // Update the mode button menu actions
+    }
+    else if (auto *kickChannel =
+                 dynamic_cast<KickChannel *>(this->split_->getChannel().get()))
+    {
+        // Kick's modes are read only here, so the button is only a label
+        this->modeButton_->setEnabled(false);
+
+        const auto &modes = kickChannel->roomModes();
+        QStringList parts;
+        if (modes.subscribersOnly)
+        {
+            parts << "sub-only";
+        }
+        if (modes.emotesOnly)
+        {
+            parts << "emote-only";
+        }
+        if (modes.slowModeInterval > 0)
+        {
+            parts << QString("slow(%1s)").arg(modes.slowModeInterval);
+        }
+        if (modes.followersOnlyDuration > 0)
+        {
+            parts << QString("follow(%1)")
+                         .arg(formatTime(modes.followersOnlyDuration * 60));
+        }
+
+        if (parts.isEmpty())
+        {
+            this->modeButton_->hide();
+        }
+        else
+        {
+            this->modeButton_->setText(parts.join(", "));
+            this->modeButton_->show();
+        }
     }
     else
     {

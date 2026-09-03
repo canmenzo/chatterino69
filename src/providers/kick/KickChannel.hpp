@@ -3,6 +3,7 @@
 #include "common/Aliases.hpp"
 #include "common/Channel.hpp"
 #include "messages/Emote.hpp"
+#include "providers/kick/KickApi.hpp"
 #include "providers/kick/KickMessage.hpp"
 
 #include <pajlada/signals/signal.hpp>
@@ -40,6 +41,15 @@ public:
     // Channel interface
     void sendMessage(const QString &message) override;
     bool isMod() const override;
+    bool isVip() const;
+    bool isBroadcaster() const override;
+    bool hasModRights() const override;
+
+    /// The chat restrictions this channel currently has switched on.
+    [[nodiscard]] const KickApi::RoomModes &roomModes() const;
+
+    /// Fires when the chat restrictions change.
+    pajlada::Signals::NoArgSignal roomModesChanged;
     bool canSendMessage() const override;
     bool isLive() const override;
 
@@ -143,6 +153,8 @@ private:
     int broadcasterUserId_{0};  // Used for REST API (sending messages)
     KickConnectionState connectionState_;
     bool isAuthenticated_{false};
+    KickApi::RoomModes roomModes_;
+    QString userRole_;
     bool isLive_{false};
     QString streamTitle_;
     int viewerCount_{0};

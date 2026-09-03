@@ -849,6 +849,13 @@ void Split::setChannel(IndirectChannel newChannel)
         });
     }
 
+    if (auto *kc = dynamic_cast<KickChannel *>(newChannel.get().get()))
+    {
+        this->roomModeChangedConnection_ = kc->roomModesChanged.connect([this] {
+            this->header_->updateRoomModes();
+        });
+    }
+
     this->indirectChannelChangedConnection_ =
         newChannel.getChannelChanged().connect([this] {
             QTimer::singleShot(0, [this] {

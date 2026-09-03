@@ -76,6 +76,23 @@ public:
     /// Get the current account
     [[nodiscard]] std::shared_ptr<KickAccount> getAccount() const;
 
+    /// The chat restrictions a Kick channel has switched on.
+    struct RoomModes {
+        bool subscribersOnly{false};
+        bool emotesOnly{false};
+        /// Seconds between messages, 0 when slow mode is off.
+        int slowModeInterval{0};
+        /// Minutes a viewer must have followed for, 0 when the mode is off.
+        int followersOnlyDuration{0};
+
+        [[nodiscard]] bool any() const
+        {
+            return this->subscribersOnly || this->emotesOnly ||
+                   this->slowModeInterval > 0 ||
+                   this->followersOnlyDuration > 0;
+        }
+    };
+
     /// Channel info resolved from Kick API
     struct ChannelInfo {
         int broadcasterUserId{0};
@@ -85,6 +102,10 @@ public:
         bool isLive{false};
         QString streamTitle;
         int viewerCount{0};
+        RoomModes roomModes;
+        /// The current user's role here: "moderator", "vip", "broadcaster" or
+        /// empty. Only set when the request carried a token.
+        QString userRole;
         bool success{false};
     };
 
