@@ -250,6 +250,37 @@ void TwitchIrcServer::initialize()
                 }
             });
         });
+
+    this->signalHolder.managedConnect(
+        getApp()->getTwitchPubSub()->pinnedChat.updated, [this](auto &data) {
+            static const QString prefix = "pinned-chat-updates-v1.";
+
+            auto topic = data.value("topic").toString();
+            if (!topic.startsWith(prefix))
+            {
+                return;
+            }
+
+            auto channelId = topic.mid(prefix.size());
+            if (channelId.isEmpty())
+            {
+                return;
+            }
+
+            auto chan = this->getChannelOrEmptyByID(channelId);
+
+            postToThread([chan, data] {
+                if (isAppAboutToQuit())
+                {
+                    return;
+                }
+
+                if (auto *channel = dynamic_cast<TwitchChannel *>(chan.get()))
+                {
+                    channel->handlePinnedChatUpdate(data);
+                }
+            });
+        });
 }
 
 void TwitchIrcServer::aboutToQuit()

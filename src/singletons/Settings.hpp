@@ -655,6 +655,9 @@ public:
     BoolSetting showUsercardNameHistoryButton = {
         "/usercard/showNameHistoryButton", true};
 
+    /// Pinned messages
+    BoolSetting enablePinnedMessages = {"/pinnedMessages/enabled", true};
+
     /// External tools
     // Streamlink
     BoolSetting streamlinkUseCustomPath = {"/external/streamlink/useCustomPath",
