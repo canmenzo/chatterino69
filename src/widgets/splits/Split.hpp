@@ -16,7 +16,7 @@
 namespace chatterino {
 
 class ChannelView;
-class PinnedMessageBanner;
+class SplitBanners;
 class SplitHeader;
 class SplitInput;
 class SplitContainer;
@@ -160,7 +160,7 @@ private:
     SplitHeader *const header_;
     ChannelView *const view_;
     SplitInput *const input_;
-    PinnedMessageBanner *const pinnedMessage_;
+    SplitBanners *const banners_;
     SplitOverlay *const overlay_;
 
     QPointer<OverlayWindow> overlayWindow_;

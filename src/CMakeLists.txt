@@ -474,6 +474,10 @@ set(SOURCE_FILES
         providers/twitch/TwitchNameHistory.hpp
         providers/twitch/TwitchPinnedChat.cpp
         providers/twitch/TwitchPinnedChat.hpp
+        providers/twitch/TwitchPoll.cpp
+        providers/twitch/TwitchPoll.hpp
+        providers/twitch/TwitchPrediction.cpp
+        providers/twitch/TwitchPrediction.hpp
         providers/twitch/TwitchIrcServer.hpp
         providers/twitch/TwitchUser.cpp
         providers/twitch/TwitchUser.hpp
@@ -791,6 +795,12 @@ set(SOURCE_FILES
         widgets/helper/InvisibleSizeGrip.hpp
         widgets/helper/PinnedMessageBanner.cpp
         widgets/helper/PinnedMessageBanner.hpp
+        widgets/helper/PollBanner.cpp
+        widgets/helper/PollBanner.hpp
+        widgets/helper/PredictionBanner.cpp
+        widgets/helper/PredictionBanner.hpp
+        widgets/helper/SplitBanners.cpp
+        widgets/helper/SplitBanners.hpp
         widgets/helper/MessageView.cpp
         widgets/helper/MessageView.hpp
         widgets/helper/NotebookTab.cpp

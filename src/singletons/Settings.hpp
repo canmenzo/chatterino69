@@ -658,6 +658,10 @@ public:
     /// Pinned messages
     BoolSetting enablePinnedMessages = {"/pinnedMessages/enabled", true};
 
+    /// Polls and predictions
+    BoolSetting enablePolls = {"/polls/enabled", true};
+    BoolSetting enablePredictions = {"/predictions/enabled", true};
+
     /// External tools
     // Streamlink
     BoolSetting streamlinkUseCustomPath = {"/external/streamlink/useCustomPath",
