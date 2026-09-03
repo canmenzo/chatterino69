@@ -66,6 +66,9 @@ private:
 
     void updateAvatarUrl();
 
+    /// Whether the usercard is showing the account we are logged in as.
+    [[nodiscard]] bool isMyself() const;
+
     void showNameHistoryMenu();
     void updateNameHistoryButton();
 

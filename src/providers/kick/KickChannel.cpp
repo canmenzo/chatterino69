@@ -131,7 +131,17 @@ bool KickChannel::isVip() const
 
 bool KickChannel::isBroadcaster() const
 {
-    return this->userRole_ == "broadcaster";
+    if (this->userRole_ == "broadcaster")
+    {
+        return true;
+    }
+
+    // the role field is only returned for an authenticated caller, and the
+    // unofficial endpoint does not always honour our token, so fall back to
+    // the one case we can always be sure of: this is your own channel
+    return this->account_ != nullptr && this->account_->isAuthenticated() &&
+           this->account_->getUserName().compare(this->channelSlug_,
+                                                 Qt::CaseInsensitive) == 0;
 }
 
 bool KickChannel::hasModRights() const
