@@ -16,6 +16,22 @@
 
 namespace chatterino {
 
+namespace {
+
+/// One scale for every platform badge, so they cannot drift apart again.
+///
+/// Image::size() clamps to expectedSize_ (16x16 by default) whenever the source
+/// is larger, and these are 48px, so the rendered size is 16 * scale, not
+/// 48 * scale. 16 * 0.6875 = 11px, against the 8px Twitch used to get and the
+/// 5px Kick did.
+///
+/// The pixmaps must be static: Image::fromResourcePixmap caches on the
+/// pixmap's address, so two stack temporaries sharing an address and a scale
+/// collide and hand back each other's image.
+constexpr qreal PLATFORM_BADGE_SCALE = 0.6875;
+
+}  // namespace
+
 MergedChannel::MergedChannel(const QString &name,
                              std::vector<ChannelPtr> sourceChannels)
     : Channel(name, Channel::Type::Merged)
@@ -451,7 +467,7 @@ EmotePtr MergedChannel::makePlatformBadge(Channel::Type type)
         case Channel::Type::Twitch: {
             // Load Twitch favicon from local resources (cached as static)
             static auto twitchEmote = []() -> EmotePtr {
-                auto pixmap = QPixmap(":/platforms/twitch.png");
+                static const QPixmap pixmap(":/platforms/twitch.png");
                 if (pixmap.isNull())
                 {
                     qCWarning(chatterinoCommon)
@@ -460,7 +476,7 @@ EmotePtr MergedChannel::makePlatformBadge(Channel::Type type)
                     return nullptr;
                 }
                 auto image =
-                    Image::fromResourcePixmap(pixmap, 0.5);  // Scale down
+                    Image::fromResourcePixmap(pixmap, PLATFORM_BADGE_SCALE);
                 return std::make_shared<Emote>(Emote{
                     .name = EmoteName{"[Twitch]"},
                     .images = ImageSet{image},
@@ -473,7 +489,7 @@ EmotePtr MergedChannel::makePlatformBadge(Channel::Type type)
         case Channel::Type::Kick: {
             // Load Kick favicon from local resources (cached as static)
             static auto kickEmote = []() -> EmotePtr {
-                auto pixmap = QPixmap(":/platforms/kick.png");
+                static const QPixmap pixmap(":/platforms/kick.png");
                 if (pixmap.isNull())
                 {
                     qCWarning(chatterinoCommon)
@@ -481,8 +497,8 @@ EmotePtr MergedChannel::makePlatformBadge(Channel::Type type)
                            ":/platforms/kick.png";
                     return nullptr;
                 }
-                // Scale to match Twitch badge size (16x16): 48px * (1/3) = 16px
-                auto image = Image::fromResourcePixmap(pixmap, 1.0 / 3.0);
+                auto image =
+                    Image::fromResourcePixmap(pixmap, PLATFORM_BADGE_SCALE);
                 return std::make_shared<Emote>(Emote{
                     .name = EmoteName{"[Kick]"},
                     .images = ImageSet{image},
@@ -501,7 +517,7 @@ EmotePtr MergedChannel::makeBothPlatformBadge()
 {
     // Load Twick (Twitch+Kick combined) favicon from local resources (cached as static)
     static auto twickEmote = []() -> EmotePtr {
-        auto pixmap = QPixmap(":/platforms/twick.png");
+        static const QPixmap pixmap(":/platforms/twick.png");
         if (pixmap.isNull())
         {
             qCWarning(chatterinoCommon) << "Failed to load Twick platform "
@@ -509,7 +525,7 @@ EmotePtr MergedChannel::makeBothPlatformBadge()
             return nullptr;
         }
         // Scale to match other badges (16x16): 48px * (1/3) = 16px
-        auto image = Image::fromResourcePixmap(pixmap, 1.0 / 3.0);
+        auto image = Image::fromResourcePixmap(pixmap, PLATFORM_BADGE_SCALE);
         return std::make_shared<Emote>(Emote{
             .name = EmoteName{"[Both]"},
             .images = ImageSet{image},
