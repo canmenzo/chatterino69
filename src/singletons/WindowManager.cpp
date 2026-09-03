@@ -10,6 +10,7 @@
 #include "providers/kick/KickAccount.hpp"
 #include "providers/kick/KickApi.hpp"
 #include "providers/kick/KickChannel.hpp"
+#include "providers/kick/KickChatServer.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/Paths.hpp"
 #include "singletons/Settings.hpp"
@@ -839,7 +840,7 @@ IndirectChannel WindowManager::decodeChannel(const SplitDescriptor &descriptor)
     {
         // Create and connect a Kick channel
         auto kickChannel =
-            std::make_shared<KickChannel>(descriptor.channelName_);
+            getApp()->getKickChatServer()->getOrCreate(descriptor.channelName_);
 
         // Set up account and API if user is logged in to Kick
         auto kickAccount = getApp()->getAccounts()->kick.getCurrent();
@@ -882,7 +883,8 @@ IndirectChannel WindowManager::decodeChannel(const SplitDescriptor &descriptor)
             else if (source.type == "kick")
             {
                 // Create and connect a Kick channel
-                auto kickChannel = std::make_shared<KickChannel>(source.name);
+                auto kickChannel =
+                    getApp()->getKickChatServer()->getOrCreate(source.name);
 
                 // Set up account and API if user is logged in to Kick
                 auto kickAccount = getApp()->getAccounts()->kick.getCurrent();

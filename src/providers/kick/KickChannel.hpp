@@ -56,6 +56,15 @@ public:
     // Kick-specific methods
     void connect();
     void disconnect();
+
+    /// Called by KickChatServer as the shared connection changes state.
+    void onServerConnected();
+    void onServerDisconnected();
+    void onServerError();
+
+    /// Called by KickChatServer when a message arrives for this chatroom.
+    void onMessageReceived(const KickMessage &message);
+
     void reconnect() override;
     [[nodiscard]] KickConnectionState getConnectionState() const;
     [[nodiscard]] QString getChannelSlug() const;
@@ -111,9 +120,6 @@ public:
     pajlada::Signals::NoArgSignal liveStatusChanged;
 
 private:
-    /// Handle incoming Kick message from WebSocket
-    void onMessageReceived(const KickMessage &message);
-
     /// Update connection state and emit signal
     void setConnectionState(KickConnectionState state);
 
@@ -159,7 +165,6 @@ private:
     QString streamTitle_;
     int viewerCount_{0};
 
-    std::unique_ptr<KickWebSocket> webSocket_;
     std::shared_ptr<KickApi> api_;
     std::shared_ptr<KickAccount> account_;
 

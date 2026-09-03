@@ -6,6 +6,7 @@
 #include "providers/kick/KickAccount.hpp"
 #include "providers/kick/KickApi.hpp"
 #include "providers/kick/KickChannel.hpp"
+#include "providers/kick/KickChatServer.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/Fonts.hpp"
 #include "singletons/Settings.hpp"
@@ -319,7 +320,8 @@ IndirectChannel SelectChannelDialog::getSelectedChannel() const
                 parsed.has_value() ? parsed->channelSlug : channelText;
 
             // Create KickChannel with account and API for sending messages
-            auto kickChannel = std::make_shared<KickChannel>(kickSlug);
+            auto kickChannel =
+                getApp()->getKickChatServer()->getOrCreate(kickSlug);
 
             // Set up authentication from current Kick account
             auto kickAccount = getApp()->getAccounts()->kick.getCurrent();

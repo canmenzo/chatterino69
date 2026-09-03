@@ -259,6 +259,13 @@ public:
         return nullptr;
     }
 
+    KickChatServer *getKickChatServer() override
+    {
+        assert(false && "EmptyApplication::getKickChatServer was called "
+                        "without being initialized");
+        return nullptr;
+    }
+
     SeventvEmotes *getSeventvEmotes() override
     {
         assert(false && "EmptyApplication::getSeventvEmotes was called without "
