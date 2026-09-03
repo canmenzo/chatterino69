@@ -15,6 +15,7 @@
 #include "controllers/commands/builtin/twitch/DeleteMessages.hpp"
 #include "controllers/commands/builtin/twitch/GetModerators.hpp"
 #include "controllers/commands/builtin/twitch/GetVIPs.hpp"
+#include "controllers/commands/builtin/twitch/Pin.hpp"
 #include "controllers/commands/builtin/twitch/Poll.hpp"
 #include "controllers/commands/builtin/twitch/Prediction.hpp"
 #include "controllers/commands/builtin/twitch/Raid.hpp"
@@ -402,6 +403,10 @@ CommandController::CommandController(const Paths &paths)
     this->registerCommand("/clear", &commands::deleteAllMessages);
 
     this->registerCommand("/delete", &commands::deleteOneMessage);
+
+    this->registerCommand("/pin", &commands::pinMessage);
+
+    this->registerCommand("/unpin", &commands::unpinMessage);
 
     this->registerCommand("/mod", &commands::addModerator);
 

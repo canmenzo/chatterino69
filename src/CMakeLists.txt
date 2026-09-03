@@ -77,6 +77,10 @@ set(SOURCE_FILES
 
         controllers/commands/builtin/chatterino/Debugging.cpp
         controllers/commands/builtin/chatterino/Debugging.hpp
+        controllers/commands/builtin/twitch/Pin.cpp
+        controllers/commands/builtin/twitch/Pin.hpp
+        providers/twitch/api/TwitchGql.cpp
+        providers/twitch/api/TwitchGql.hpp
         controllers/commands/builtin/kick/ModerationActions.cpp
         controllers/commands/builtin/kick/ModerationActions.hpp
         controllers/commands/builtin/Misc.cpp

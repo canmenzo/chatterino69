@@ -941,6 +941,45 @@ void GeneralPage::initLayout(GeneralPageView &layout)
             ->addTo(layout, form);
     }
 
+    layout.addTitle("Channel events");
+    layout.addDescription(
+        "Show what a channel is running above the chat. These read Twitch's "
+        "PubSub feed and need no login.");
+
+    SettingWidget::checkbox("Show pinned messages", s.enablePinnedMessages)
+        ->addTo(layout);
+    SettingWidget::checkbox("Show polls", s.enablePolls)->addTo(layout);
+    SettingWidget::checkbox("Show predictions", s.enablePredictions)
+        ->addTo(layout);
+    SettingWidget::checkbox("Show a name history button in usercards",
+                            s.showUsercardNameHistoryButton)
+        ->setTooltip(
+            "Name history comes from a third-party logs service, not Twitch.")
+        ->addTo(layout);
+
+    layout.addTitle("Twitch private API");
+    layout.addDescription(
+        "Twitch has no public API for pinning a message, running a prediction "
+        "or redeeming channel points, so these go through the same private "
+        "endpoint their website uses. That means sending Twitch's own client "
+        "id with your token, which their Developer Agreement does not allow "
+        "and which accounts have occasionally been actioned for. It is off "
+        "unless you turn it on. Paste the value of the auth-token cookie "
+        "from twitch.tv while logged in. Never run a script someone hands you "
+        "to fetch it.");
+
+    SettingWidget::checkbox("Enable Twitch's private API", s.enableTwitchGql)
+        ->setTooltip("Turns on /pin and /unpin. Read the warning above first.")
+        ->addTo(layout);
+    {
+        auto *gqlForm = new QFormLayout();
+        layout.addLayout(gqlForm);
+
+        SettingWidget::lineEdit("Twitch token", s.twitchGqlToken,
+                                "auth-token cookie value")
+            ->addTo(layout, gqlForm);
+    }
+
     layout.addTitle("Kick Integration");
     layout.addDescription(
         "Enable Kick.com chat integration to view and send messages to Kick "
