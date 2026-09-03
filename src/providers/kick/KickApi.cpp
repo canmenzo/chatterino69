@@ -11,6 +11,8 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 
+#include <algorithm>
+
 namespace chatterino {
 
 QString translateKickError(KickError error, const QString &apiMessage,
@@ -371,6 +373,149 @@ void KickApi::sendMessage(int broadcasterUserId, const QString &message,
                 << broadcasterUserId;
             callback(result);
         });
+}
+
+void KickApi::sendAuthorizedRequest(
+    const QByteArray &verb, const QString &endpoint,
+    const std::optional<QJsonObject> &body,
+    std::function<void(KickApiResult result)> callback,
+    std::function<void()> retry)
+{
+    if (!this->account_ || !this->account_->isAuthenticated())
+    {
+        KickApiResult result;
+        result.errorMessage = translateKickError(KickError::UserMissingScope);
+        callback(result);
+        return;
+    }
+
+    if (this->isRateLimited())
+    {
+        KickApiResult result;
+        result.rateLimit = this->rateLimitInfo_;
+
+        auto secondsUntilReset = static_cast<int>(std::max<qint64>(
+            0,
+            QDateTime::currentDateTime().secsTo(this->rateLimitInfo_.resetAt)));
+        result.errorMessage =
+            translateKickError(KickError::RateLimited, {}, secondsUntilReset);
+        this->rateLimited.invoke(secondsUntilReset);
+
+        callback(result);
+        return;
+    }
+
+    if (this->account_->isTokenExpired())
+    {
+        this->refreshAndRetry(std::move(retry));
+        return;
+    }
+
+    QNetworkRequest request{QUrl{
+        QString("%1/%2").arg(QString::fromLatin1(KICK_API_BASE), endpoint)}};
+    request.setHeader(QNetworkRequest::UserAgentHeader, "Chatterino7");
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    request.setRawHeader(
+        "Authorization",
+        QString("Bearer %1").arg(this->account_->getAccessToken()).toUtf8());
+
+    QByteArray payload;
+    if (body)
+    {
+        payload = QJsonDocument(*body).toJson(QJsonDocument::Compact);
+    }
+
+    QNetworkReply *reply =
+        this->networkManager_->sendCustomRequest(request, verb, payload);
+
+    QObject::connect(
+        reply, &QNetworkReply::finished, this, [this, reply, callback, retry] {
+            reply->deleteLater();
+            this->updateRateLimitFromReply(reply);
+
+            KickApiResult result;
+            result.rateLimit = this->rateLimitInfo_;
+            result.httpStatus =
+                reply->attribute(QNetworkRequest::HttpStatusCodeAttribute)
+                    .toInt();
+
+            if (reply->error() != QNetworkReply::NoError)
+            {
+                result = this->handleErrorResponse(reply);
+
+                if (result.httpStatus == 401)
+                {
+                    this->refreshAndRetry(retry);
+                    return;
+                }
+                if (result.httpStatus == 429)
+                {
+                    this->rateLimited.invoke(static_cast<int>(std::max<qint64>(
+                        0, QDateTime::currentDateTime().secsTo(
+                               this->rateLimitInfo_.resetAt))));
+                }
+
+                callback(result);
+                return;
+            }
+
+            result.success = true;
+            callback(result);
+        });
+}
+
+void KickApi::banUser(int broadcasterUserId, int userId,
+                      std::optional<int> durationMinutes, const QString &reason,
+                      std::function<void(KickApiResult result)> callback)
+{
+    QJsonObject body{
+        {"broadcaster_user_id", broadcasterUserId},
+        {"user_id", userId},
+    };
+    if (durationMinutes)
+    {
+        body["duration"] = *durationMinutes;
+    }
+    if (!reason.isEmpty())
+    {
+        body["reason"] = reason;
+    }
+
+    this->sendAuthorizedRequest(
+        "POST", "moderation/bans", body, callback,
+        [this, broadcasterUserId, userId, durationMinutes, reason, callback] {
+            this->banUser(broadcasterUserId, userId, durationMinutes, reason,
+                          callback);
+        });
+}
+
+void KickApi::unbanUser(int broadcasterUserId, int userId,
+                        std::function<void(KickApiResult result)> callback)
+{
+    QJsonObject body{
+        {"broadcaster_user_id", broadcasterUserId},
+        {"user_id", userId},
+    };
+
+    this->sendAuthorizedRequest("DELETE", "moderation/bans", body, callback,
+                                [this, broadcasterUserId, userId, callback] {
+                                    this->unbanUser(broadcasterUserId, userId,
+                                                    callback);
+                                });
+}
+
+void KickApi::deleteChatMessage(
+    const QString &messageId,
+    std::function<void(KickApiResult result)> callback)
+{
+    auto endpoint = QString("chat/%1").arg(
+        QString::fromUtf8(QUrl::toPercentEncoding(messageId)));
+
+    this->sendAuthorizedRequest("DELETE", endpoint, std::nullopt, callback,
+                                [this, messageId, callback] {
+                                    this->deleteChatMessage(messageId,
+                                                            callback);
+                                });
 }
 
 KickRateLimitInfo KickApi::getRateLimitInfo() const

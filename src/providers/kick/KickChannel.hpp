@@ -58,6 +58,7 @@ public:
 
     // API access
     void setApi(std::shared_ptr<KickApi> api);
+    [[nodiscard]] std::shared_ptr<KickApi> api() const;
     void setAccount(std::shared_ptr<KickAccount> account);
 
     // Recent messages (stub - Kick history API not available)
@@ -114,9 +115,6 @@ private:
 
     /// Schedule reconnection with exponential backoff
     void scheduleReconnect();
-
-    /// Add a system message to the channel
-    void addSystemMessage(const QString &text);
 
     /// Parse message content and emotes into message elements
     /// @param builder The MessageBuilder to add elements to

@@ -141,6 +141,11 @@ void KickChannel::setApi(std::shared_ptr<KickApi> api)
     this->api_ = std::move(api);
 }
 
+std::shared_ptr<KickApi> KickChannel::api() const
+{
+    return this->api_;
+}
+
 void KickChannel::setAccount(std::shared_ptr<KickAccount> account)
 {
     this->account_ = std::move(account);
@@ -781,12 +786,6 @@ void KickChannel::scheduleReconnect()
             self->connect();
         }
     });
-}
-
-void KickChannel::addSystemMessage(const QString &text)
-{
-    auto msg = makeSystemMessage(text);
-    this->addMessage(msg, MessageContext::Original);
 }
 
 std::optional<EmotePtr> KickChannel::findThirdPartyEmote(
