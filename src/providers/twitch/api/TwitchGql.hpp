@@ -93,6 +93,29 @@ void redeemChannelPointReward(const QString &channelId,
                               std::function<void()> onSuccess,
                               FailureCallback onFailure);
 
+struct UsercardMessage {
+    QString id;
+    QString text;
+    /// ISO 8601, as Twitch sends it.
+    QString sentAt;
+    bool isDeleted = false;
+};
+
+struct UsercardMessagePage {
+    std::vector<UsercardMessage> messages;
+    QString nextCursor;
+    bool hasNextPage = false;
+};
+
+/// Reads a page of one user's past messages in a channel, newest first.
+///
+/// This is the channel's moderator log, so it only answers for a channel the
+/// user moderates. Pass the cursor from a previous page to continue.
+void usercardMessages(const QString &channelId, const QString &senderId,
+                      const QString &cursor,
+                      std::function<void(UsercardMessagePage)> onSuccess,
+                      FailureCallback onFailure);
+
 }  // namespace gql
 
 }  // namespace chatterino
