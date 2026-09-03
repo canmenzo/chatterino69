@@ -51,6 +51,16 @@ void query(const QString &operationName, const QString &document,
 /// Pulls the first error message out of a GraphQL response, if any.
 QString firstError(const QJsonObject &response);
 
+/// Casts a free vote in a poll as @a userId.
+void voteInPoll(const QString &pollId, const QString &choiceId,
+                const QString &userId, std::function<void()> onSuccess,
+                FailureCallback onFailure);
+
+/// Puts @a points channel points on an outcome of a running prediction.
+void makePrediction(const QString &eventId, const QString &outcomeId,
+                    int points, std::function<void()> onSuccess,
+                    FailureCallback onFailure);
+
 }  // namespace gql
 
 }  // namespace chatterino

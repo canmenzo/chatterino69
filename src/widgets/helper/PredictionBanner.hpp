@@ -10,6 +10,7 @@
 
 class QLabel;
 class QTimer;
+class QEvent;
 class QVBoxLayout;
 
 namespace chatterino {
@@ -30,10 +31,12 @@ public:
 
 protected:
     void themeChangedEvent() override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     void refresh();
     void updateCountdown();
+    void predictOn(size_t outcomeIndex);
 
     ChannelPtr channel_;
     pajlada::Signals::SignalHolder channelConnections_;
@@ -44,6 +47,9 @@ private:
     QTimer *countdown_ = nullptr;
 
     std::vector<QLabel *> outcomeLabels_;
+    QString eventId_;
+    std::vector<QString> outcomeIds_;
+    bool acceptsEntries_ = false;
     QDateTime locksAt_;
 };
 
