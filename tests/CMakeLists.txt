@@ -59,6 +59,8 @@ set(test_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/TwitchChannel.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/TwitchNameHistory.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/TwitchPinnedChat.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/TwitchPoll.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/TwitchPrediction.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/TwitchUserColor.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/FunctionRef.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/KickApi.cpp

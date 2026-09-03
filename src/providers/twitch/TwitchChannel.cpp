@@ -1570,6 +1570,16 @@ void TwitchChannel::refreshPubSub()
         this->refreshPinnedMessage();
     }
 
+    if (getSettings()->enablePolls)
+    {
+        getApp()->getTwitchPubSub()->listenToPolls(roomId);
+    }
+
+    if (getSettings()->enablePredictions)
+    {
+        getApp()->getTwitchPubSub()->listenToPredictions(roomId);
+    }
+
     if (currentAccount->isAnon())
     {
         this->eventSubChannelModerateHandle.reset();
@@ -2595,6 +2605,72 @@ void TwitchChannel::handlePinnedChatUpdate(const QJsonObject &payload)
 
     // pin-message and update-message only carry a partial message, so re-read
     this->refreshPinnedMessage();
+}
+
+std::optional<TwitchPoll> TwitchChannel::poll() const
+{
+    return *this->poll_.accessConst();
+}
+
+void TwitchChannel::handlePollUpdate(const QJsonObject &payload)
+{
+    if (!getSettings()->enablePolls)
+    {
+        return;
+    }
+
+    auto poll = parseTwitchPoll(payload);
+    auto isEnd = payload.value("type").toString() == "POLL_END";
+
+    {
+        auto locked = this->poll_.access();
+
+        // an end event without a body means whatever was running has finished
+        if (!poll && isEnd)
+        {
+            if (!locked->has_value())
+            {
+                return;
+            }
+            (*locked)->status = QStringLiteral("COMPLETED");
+        }
+        else if (!poll)
+        {
+            return;
+        }
+        else
+        {
+            *locked = std::move(poll);
+        }
+    }
+
+    this->pollChanged.invoke();
+}
+
+std::optional<TwitchPrediction> TwitchChannel::prediction() const
+{
+    return *this->prediction_.accessConst();
+}
+
+void TwitchChannel::handlePredictionUpdate(const QJsonObject &payload)
+{
+    if (!getSettings()->enablePredictions)
+    {
+        return;
+    }
+
+    auto prediction = parseTwitchPrediction(payload);
+    if (!prediction)
+    {
+        return;
+    }
+
+    {
+        auto locked = this->prediction_.access();
+        *locked = std::move(prediction);
+    }
+
+    this->predictionChanged.invoke();
 }
 
 }  // namespace chatterino

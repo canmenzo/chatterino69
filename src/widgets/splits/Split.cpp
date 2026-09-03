@@ -26,9 +26,9 @@
 #include "widgets/helper/ChannelView.hpp"
 #include "widgets/helper/DebugPopup.hpp"
 #include "widgets/helper/NotebookTab.hpp"
-#include "widgets/helper/PinnedMessageBanner.hpp"
 #include "widgets/helper/ResizingTextEdit.hpp"
 #include "widgets/helper/SearchPopup.hpp"
+#include "widgets/helper/SplitBanners.hpp"
 #include "widgets/Notebook.hpp"
 #include "widgets/OverlayWindow.hpp"
 #include "widgets/Scrollbar.hpp"
@@ -90,7 +90,7 @@ Split::Split(QWidget *parent)
     , view_(new ChannelView(this, this, ChannelView::Context::None,
                             getSettings()->scrollbackSplitLimit))
     , input_(new SplitInput(this))
-    , pinnedMessage_(new PinnedMessageBanner(this))
+    , banners_(new SplitBanners(this))
     , overlay_(new SplitOverlay(this))
 {
     this->setMouseTracking(true);
@@ -102,7 +102,7 @@ Split::Split(QWidget *parent)
     this->vbox_->setContentsMargins(1, 1, 1, 1);
 
     this->vbox_->addWidget(this->header_);
-    this->vbox_->addWidget(this->pinnedMessage_);
+    this->vbox_->addWidget(this->banners_);
     this->vbox_->addWidget(this->view_, 1);
     this->vbox_->addWidget(this->input_);
 
@@ -859,7 +859,7 @@ void Split::setChannel(IndirectChannel newChannel)
     this->header_->updateIcons();
     this->header_->updateChannelText();
     this->header_->updateRoomModes();
-    this->pinnedMessage_->setChannel(newChannel.get());
+    this->banners_->setChannel(newChannel.get());
 
     this->channelSignalHolder_.managedConnect(
         this->channel_.get()->displayNameChanged, [this] {

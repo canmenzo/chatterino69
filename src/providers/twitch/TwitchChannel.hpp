@@ -11,6 +11,8 @@
 #include "providers/twitch/eventsub/SubscriptionHandle.hpp"
 #include "providers/twitch/TwitchEmotes.hpp"
 #include "providers/twitch/TwitchPinnedChat.hpp"
+#include "providers/twitch/TwitchPoll.hpp"
+#include "providers/twitch/TwitchPrediction.hpp"
 #include "util/QStringHash.hpp"
 #include "util/ThreadGuard.hpp"
 
@@ -326,6 +328,24 @@ public:
     /// Applies a pinned-chat-updates-v1 event.
     void handlePinnedChatUpdate(const QJsonObject &payload);
 
+    /// Fires whenever the channel's poll appears, changes or clears.
+    pajlada::Signals::NoArgSignal pollChanged;
+
+    /// The poll running in this channel, if any.
+    std::optional<TwitchPoll> poll() const;
+
+    /// Applies a polls.{channelID} event.
+    void handlePollUpdate(const QJsonObject &payload);
+
+    /// Fires whenever the channel's prediction appears, changes or clears.
+    pajlada::Signals::NoArgSignal predictionChanged;
+
+    /// The prediction running in this channel, if any.
+    std::optional<TwitchPrediction> prediction() const;
+
+    /// Applies a predictions-channel-v1.{channelID} event.
+    void handlePredictionUpdate(const QJsonObject &payload);
+
     // Channel point rewards
     void addQueuedRedemption(const QString &rewardId,
                              const QString &originalContent,
@@ -473,6 +493,8 @@ private:
     UniqueAccess<StreamStatus> streamStatus_;
     UniqueAccess<RoomModes> roomModes;
     UniqueAccess<std::optional<TwitchPinnedMessage>> pinnedMessage_;
+    UniqueAccess<std::optional<TwitchPoll>> poll_;
+    UniqueAccess<std::optional<TwitchPrediction>> prediction_;
     bool disconnected_{};
     std::optional<std::chrono::time_point<std::chrono::system_clock>>
         lastConnectedAt_{};
