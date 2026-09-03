@@ -367,4 +367,59 @@ void redeemChannelPointReward(const QString &channelId,
         std::move(onFailure), Client::AndroidTV);
 }
 
+void usercardMessages(const QString &channelId, const QString &senderId,
+                      const QString &cursor,
+                      std::function<void(UsercardMessagePage)> onSuccess,
+                      FailureCallback onFailure)
+{
+    QJsonObject variables{
+        {"channelID", channelId},
+        {"senderID", senderId},
+    };
+    if (!cursor.isEmpty())
+    {
+        variables["cursor"] = cursor;
+    }
+
+    persistedQuery(
+        "ViewerCardModLogsMessagesBySender",
+        "eb4e9869e1bb0b3ed553e1ed657fa09f8553781093569c3a5813ad09ee9c0776",
+        variables,
+        [onSuccess = std::move(onSuccess)](const QJsonObject &data) {
+            auto messages = data.value("viewerCardModLogs")
+                                .toObject()
+                                .value("messages")
+                                .toObject();
+
+            UsercardMessagePage page;
+            page.hasNextPage = messages.value("pageInfo")
+                                   .toObject()
+                                   .value("hasNextPage")
+                                   .toBool();
+
+            for (const auto &value : messages.value("edges").toArray())
+            {
+                auto edge = value.toObject();
+                auto node = edge.value("node").toObject();
+
+                UsercardMessage message;
+                message.id = node.value("id").toString();
+                message.text =
+                    node.value("content").toObject().value("text").toString();
+                message.sentAt = node.value("sentAt").toString();
+                message.isDeleted = node.value("isDeleted").toBool();
+
+                if (!message.text.isEmpty())
+                {
+                    page.messages.push_back(std::move(message));
+                }
+
+                page.nextCursor = edge.value("cursor").toString();
+            }
+
+            onSuccess(std::move(page));
+        },
+        std::move(onFailure), Client::AndroidTV);
+}
+
 }  // namespace chatterino::gql

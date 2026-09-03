@@ -16,6 +16,7 @@
 #include "providers/IvrApi.hpp"
 #include "providers/pronouns/Pronouns.hpp"
 #include "providers/twitch/api/Helix.hpp"
+#include "providers/twitch/api/TwitchGql.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
@@ -658,9 +659,17 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
         this->ui_.latestMessages->setSizePolicy(QSizePolicy::Expanding,
                                                 QSizePolicy::Expanding);
 
+        this->ui_.loadMore = new LabelButton("Load older messages", this);
+        this->ui_.loadMore->setVisible(false);
+        QObject::connect(this->ui_.loadMore, &Button::leftClicked, [this] {
+            this->loadMoreMessages();
+        });
+
         logs->addWidget(this->ui_.noMessagesLabel);
         logs->addWidget(this->ui_.latestMessages);
+        logs->addWidget(this->ui_.loadMore);
         logs->setAlignment(this->ui_.noMessagesLabel, Qt::AlignHCenter);
+        logs->setAlignment(this->ui_.loadMore, Qt::AlignHCenter);
     }
 
     // size grip
@@ -1020,6 +1029,7 @@ void UserInfoPopup::updateUserData()
 
         this->userId_ = user.id;
         this->updateNameHistoryButton();
+        this->updateLoadMoreButton();
         this->helixAvatarUrl_ = user.profileImageUrl;
         this->updateAvatarUrl();
         this->updateNotes();
@@ -1534,6 +1544,111 @@ void UserInfoPopup::updateNameHistoryButton()
     this->ui_.nameHistory->setVisible(
         getSettings()->showUsercardNameHistoryButton &&
         !this->userId_.isEmpty());
+}
+
+void UserInfoPopup::updateLoadMoreButton()
+{
+    if (this->ui_.loadMore == nullptr)
+    {
+        return;
+    }
+
+    auto *twitch =
+        dynamic_cast<TwitchChannel *>(this->underlyingChannel_.get());
+
+    // this reads the channel's mod log, so it needs both the private API and
+    // mod rights here
+    this->ui_.loadMore->setVisible(
+        gql::isEnabled() && !this->userId_.isEmpty() && twitch != nullptr &&
+        twitch->hasModRights() && this->messagesHaveNextPage_ &&
+        !this->messagesLoading_);
+}
+
+void UserInfoPopup::loadMoreMessages()
+{
+    auto *twitch =
+        dynamic_cast<TwitchChannel *>(this->underlyingChannel_.get());
+    if (twitch == nullptr || this->userId_.isEmpty() || this->messagesLoading_)
+    {
+        return;
+    }
+
+    this->messagesLoading_ = true;
+    this->ui_.loadMore->setText("Loading...");
+
+    QPointer<UserInfoPopup> guard(this);
+    auto requestedFor = this->userId_;
+
+    gql::usercardMessages(
+        twitch->roomId(), this->userId_, this->messagesCursor_,
+        [guard, requestedFor](const gql::UsercardMessagePage &page) {
+            // the popup may have moved to another user while this was in flight
+            if (!guard || guard->userId_ != requestedFor)
+            {
+                return;
+            }
+
+            guard->messagesLoading_ = false;
+            guard->messagesCursor_ = page.nextCursor;
+            guard->messagesHaveNextPage_ =
+                page.hasNextPage && !page.nextCursor.isEmpty();
+            guard->ui_.loadMore->setText("Load older messages");
+
+            auto channel = guard->ui_.latestMessages->channel();
+            if (!channel)
+            {
+                guard->updateLoadMoreButton();
+                return;
+            }
+
+            // Twitch returns newest first, and these go above what is shown
+            std::vector<MessagePtr> older;
+            older.reserve(page.messages.size());
+            for (auto it = page.messages.crbegin(); it != page.messages.crend();
+                 ++it)
+            {
+                MessageBuilder builder;
+                builder.message().serverReceivedTime =
+                    QDateTime::fromString(it->sentAt, Qt::ISODateWithMs);
+                builder.emplace<TimestampElement>(
+                    builder.message().serverReceivedTime.time());
+                builder
+                    .emplace<TextElement>(
+                        guard->userName_ + ":", MessageElementFlag::Username,
+                        MessageColor::System, FontStyle::ChatMediumBold)
+                    ->setLink({Link::UserInfo, guard->userName_});
+                builder.emplace<TextElement>(it->text,
+                                             MessageElementFlag::Text);
+                if (it->isDeleted)
+                {
+                    builder.message().flags.set(MessageFlag::Disabled);
+                }
+
+                older.push_back(builder.release());
+            }
+
+            if (!older.empty())
+            {
+                channel->addMessagesAtStart(older);
+                guard->ui_.latestMessages->setVisible(true);
+                guard->ui_.noMessagesLabel->setVisible(false);
+            }
+
+            guard->updateLoadMoreButton();
+        },
+        [guard](const QString &error) {
+            if (!guard)
+            {
+                return;
+            }
+            guard->messagesLoading_ = false;
+            guard->ui_.loadMore->setText("Load older messages");
+            guard->underlyingChannel_->addSystemMessage(
+                "Could not load older messages: " + error);
+            guard->updateLoadMoreButton();
+        });
+
+    this->updateLoadMoreButton();
 }
 
 void UserInfoPopup::showNameHistoryMenu()
