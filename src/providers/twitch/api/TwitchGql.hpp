@@ -1,0 +1,56 @@
+#pragma once
+
+#include <QJsonObject>
+#include <QString>
+
+#include <functional>
+
+namespace chatterino {
+
+class NetworkResult;
+
+/// Twitch's private GraphQL API.
+///
+/// Everything Twitch's own site can do that the public API cannot: pinning a
+/// message, creating and resolving predictions, voting in polls, redeeming
+/// channel points. Reaching it means presenting Twitch's web client id
+/// alongside a user token, which their Developer Agreement does not permit, so
+/// every call here is gated behind the enableTwitchGql setting and a token the
+/// user supplies themselves.
+///
+/// Read-only queries that need no token do not belong here; see
+/// TwitchPinnedChat for an anonymous one.
+namespace gql {
+
+/// True when the user has switched this on and given us a token.
+bool isEnabled();
+
+/// The user's token, stripped of any "OAuth "/"Authorization:" prefix.
+QString token();
+
+/// A short reason why a call cannot be made, or an empty string when it can.
+QString unavailableReason();
+
+using SuccessCallback = std::function<void(const QJsonObject &data)>;
+using FailureCallback = std::function<void(const QString &error)>;
+
+/// Runs a persisted query by its operation name and hash.
+///
+/// @a onFailure receives Twitch's own error message where there is one, since
+/// these operations fail for reasons worth showing (not a mod, message too
+/// old, prediction already locked).
+void persistedQuery(const QString &operationName, const QString &sha256Hash,
+                    const QJsonObject &variables, SuccessCallback onSuccess,
+                    FailureCallback onFailure);
+
+/// Runs a GraphQL document directly, for operations with no stable hash.
+void query(const QString &operationName, const QString &document,
+           const QJsonObject &variables, SuccessCallback onSuccess,
+           FailureCallback onFailure);
+
+/// Pulls the first error message out of a GraphQL response, if any.
+QString firstError(const QJsonObject &response);
+
+}  // namespace gql
+
+}  // namespace chatterino
