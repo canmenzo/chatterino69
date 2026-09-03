@@ -10,6 +10,7 @@
 #include "providers/ffz/FfzEmotes.hpp"
 #include "providers/twitch/eventsub/SubscriptionHandle.hpp"
 #include "providers/twitch/TwitchEmotes.hpp"
+#include "providers/twitch/TwitchPinnedChat.hpp"
 #include "util/QStringHash.hpp"
 #include "util/ThreadGuard.hpp"
 
@@ -316,6 +317,15 @@ public:
 
     pajlada::Signals::NoArgSignal roomModesChanged;
 
+    /// Fires whenever the channel's pinned message appears, changes or clears.
+    pajlada::Signals::NoArgSignal pinnedMessageChanged;
+
+    /// The message currently pinned in this channel, if any.
+    std::optional<TwitchPinnedMessage> pinnedMessage() const;
+
+    /// Applies a pinned-chat-updates-v1 event.
+    void handlePinnedChatUpdate(const QJsonObject &payload);
+
     // Channel point rewards
     void addQueuedRedemption(const QString &rewardId,
                              const QString &originalContent,
@@ -368,6 +378,11 @@ private:
     };
 
     void refreshPubSub();
+
+    /// Re-reads the pinned message from Twitch. The PubSub event only signals
+    /// that something changed, not what.
+    void refreshPinnedMessage();
+    void setPinnedMessage(std::optional<TwitchPinnedMessage> pin);
     void refreshChatters();
     void refreshBadges();
     void refreshCheerEmotes();
@@ -457,6 +472,7 @@ private:
     int chatterCount_{};
     UniqueAccess<StreamStatus> streamStatus_;
     UniqueAccess<RoomModes> roomModes;
+    UniqueAccess<std::optional<TwitchPinnedMessage>> pinnedMessage_;
     bool disconnected_{};
     std::optional<std::chrono::time_point<std::chrono::system_clock>>
         lastConnectedAt_{};

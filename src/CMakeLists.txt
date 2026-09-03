@@ -472,6 +472,8 @@ set(SOURCE_FILES
         providers/twitch/TwitchIrcServer.cpp
         providers/twitch/TwitchNameHistory.cpp
         providers/twitch/TwitchNameHistory.hpp
+        providers/twitch/TwitchPinnedChat.cpp
+        providers/twitch/TwitchPinnedChat.hpp
         providers/twitch/TwitchIrcServer.hpp
         providers/twitch/TwitchUser.cpp
         providers/twitch/TwitchUser.hpp
@@ -500,6 +502,10 @@ set(SOURCE_FILES
         providers/twitch/pubsubmessages/Listen.cpp
         providers/twitch/pubsubmessages/Listen.hpp
         providers/twitch/pubsubmessages/Message.hpp
+        providers/twitch/pubsubmessages/PinnedChat.cpp
+        providers/twitch/pubsubmessages/PinnedChat.hpp
+        providers/twitch/pubsubmessages/PredictionEvent.cpp
+        providers/twitch/pubsubmessages/PredictionEvent.hpp
         providers/twitch/pubsubmessages/Unlisten.cpp
         providers/twitch/pubsubmessages/Unlisten.hpp
 
@@ -783,6 +789,8 @@ set(SOURCE_FILES
         widgets/helper/IconDelegate.hpp
         widgets/helper/InvisibleSizeGrip.cpp
         widgets/helper/InvisibleSizeGrip.hpp
+        widgets/helper/PinnedMessageBanner.cpp
+        widgets/helper/PinnedMessageBanner.hpp
         widgets/helper/MessageView.cpp
         widgets/helper/MessageView.hpp
         widgets/helper/NotebookTab.cpp
