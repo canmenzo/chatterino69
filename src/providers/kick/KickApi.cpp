@@ -194,11 +194,25 @@ void KickApi::resolveChannelInfo(const QString &channelSlug,
                 info.broadcasterUserId = obj["user"].toObject()["id"].toInt();
             }
 
-            // Extract chatroom ID
+            // Extract chatroom ID and the chat restrictions alongside it
             if (obj.contains("chatroom") && obj["chatroom"].isObject())
             {
                 QJsonObject chatroom = obj["chatroom"].toObject();
                 info.chatroomId = chatroom["id"].toInt();
+
+                info.roomModes.subscribersOnly =
+                    chatroom["subscribers_mode"].toBool();
+                info.roomModes.emotesOnly = chatroom["emotes_mode"].toBool();
+                if (chatroom["slow_mode"].toBool())
+                {
+                    info.roomModes.slowModeInterval =
+                        chatroom["message_interval"].toInt();
+                }
+                if (chatroom["followers_mode"].toBool())
+                {
+                    info.roomModes.followersOnlyDuration =
+                        chatroom["following_min_duration"].toInt();
+                }
             }
             else if (obj.contains("id"))
             {
@@ -212,6 +226,9 @@ void KickApi::resolveChannelInfo(const QString &channelSlug,
                 info.displayName =
                     obj["user"].toObject()["username"].toString();
             }
+
+            // Present only when the request was authenticated
+            info.userRole = obj["role"].toString();
 
             // Extract livestream info (check if channel is live)
             if (obj.contains("livestream") && !obj["livestream"].isNull())

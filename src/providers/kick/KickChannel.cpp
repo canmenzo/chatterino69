@@ -121,8 +121,27 @@ void KickChannel::sendMessage(const QString &message)
 
 bool KickChannel::isMod() const
 {
-    // TODO: Implement mod status checking
-    return false;
+    return this->userRole_ == "moderator";
+}
+
+bool KickChannel::isVip() const
+{
+    return this->userRole_ == "vip";
+}
+
+bool KickChannel::isBroadcaster() const
+{
+    return this->userRole_ == "broadcaster";
+}
+
+bool KickChannel::hasModRights() const
+{
+    return this->isMod() || this->isBroadcaster();
+}
+
+const KickApi::RoomModes &KickChannel::roomModes() const
+{
+    return this->roomModes_;
 }
 
 bool KickChannel::canSendMessage() const
@@ -687,6 +706,19 @@ void KickChannel::resolveAndSubscribe()
 
             this->chatroomId_ = info.chatroomId;
             this->broadcasterUserId_ = info.broadcasterUserId;
+            this->userRole_ = info.userRole;
+
+            if (this->roomModes_.subscribersOnly !=
+                    info.roomModes.subscribersOnly ||
+                this->roomModes_.emotesOnly != info.roomModes.emotesOnly ||
+                this->roomModes_.slowModeInterval !=
+                    info.roomModes.slowModeInterval ||
+                this->roomModes_.followersOnlyDuration !=
+                    info.roomModes.followersOnlyDuration)
+            {
+                this->roomModes_ = info.roomModes;
+                this->roomModesChanged.invoke();
+            }
 
             // Update live status
             bool wasLive = this->isLive_;
