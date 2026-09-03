@@ -37,6 +37,7 @@
 #include "messages/Message.hpp"
 #include "messages/MessageBuilder.hpp"
 #include "providers/emoji/Emojis.hpp"
+#include "providers/kick/KickChannel.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchCommon.hpp"
@@ -559,6 +560,7 @@ QString CommandController::execCommand(const QString &textNoEmoji,
                     words,
                     channel,
                     dynamic_cast<TwitchChannel *>(channel.get()),
+                    dynamic_cast<KickChannel *>(channel.get()),
                 };
                 return (*command)(ctx);
             }

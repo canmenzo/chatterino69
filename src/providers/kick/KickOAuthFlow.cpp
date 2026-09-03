@@ -145,7 +145,8 @@ QString KickOAuthFlow::buildAuthorizationUrl() const
     query.addQueryItem("response_type", "code");
     query.addQueryItem("client_id", clientId);
     query.addQueryItem("redirect_uri", REDIRECT_URI);
-    query.addQueryItem("scope", "chat:write user:read channel:read");
+    query.addQueryItem("scope",
+                       "chat:write user:read channel:read moderation:ban");
     query.addQueryItem("state", this->state_);
     query.addQueryItem("code_challenge", this->codeChallenge_);
     query.addQueryItem("code_challenge_method", "S256");
