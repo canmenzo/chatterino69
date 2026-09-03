@@ -1,5 +1,7 @@
 #include "widgets/helper/SplitBanners.hpp"
 
+#include "channels/MergedChannel.hpp"
+#include "providers/twitch/TwitchChannel.hpp"
 #include "widgets/helper/PinnedMessageBanner.hpp"
 #include "widgets/helper/PollBanner.hpp"
 #include "widgets/helper/PredictionBanner.hpp"
@@ -34,9 +36,24 @@ SplitBanners::SplitBanners(QWidget *parent)
 
 void SplitBanners::setChannel(const ChannelPtr &channel)
 {
-    this->pinnedMessage_->setChannel(channel);
-    this->prediction_->setChannel(channel);
-    this->poll_->setChannel(channel);
+    // all three of these describe a Twitch channel, and a merged split carries
+    // one rather than being one
+    auto target = channel;
+    if (auto *merged = dynamic_cast<MergedChannel *>(channel.get()))
+    {
+        for (const auto &source : merged->getSourceChannels())
+        {
+            if (dynamic_cast<TwitchChannel *>(source.get()) != nullptr)
+            {
+                target = source;
+                break;
+            }
+        }
+    }
+
+    this->pinnedMessage_->setChannel(target);
+    this->prediction_->setChannel(target);
+    this->poll_->setChannel(target);
 
     this->updateVisibility();
 }

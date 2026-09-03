@@ -49,10 +49,9 @@ KickChannel::~KickChannel()
 
 void KickChannel::sendMessage(const QString &message)
 {
-    // Check for empty message (matches Twitch behavior)
+    // a handled command sends nothing, so an empty message is not an error
     if (message.trimmed().isEmpty())
     {
-        this->addSystemMessage(translateKickError(KickError::MissingText));
         return;
     }
 

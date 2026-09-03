@@ -1,6 +1,7 @@
 #include "controllers/commands/CommandController.hpp"
 
 #include "Application.hpp"
+#include "channels/MergedChannel.hpp"
 #include "common/Channel.hpp"
 #include "controllers/accounts/AccountController.hpp"
 #include "controllers/commands/builtin/chatterino/Debugging.hpp"
@@ -268,6 +269,61 @@ const std::unordered_map<QString, VariableReplacer> COMMAND_VARS{
 }  // namespace
 
 namespace chatterino {
+
+namespace {
+
+/// A merged split has no channel of its own to act on, so commands look
+/// through to whichever platform channel it is carrying.
+CommandContext makeCommandContext(const QStringList &words,
+                                  const ChannelPtr &channel)
+{
+    CommandContext ctx{
+        words,
+        channel,
+        dynamic_cast<TwitchChannel *>(channel.get()),
+        dynamic_cast<KickChannel *>(channel.get()),
+    };
+
+    auto *merged = dynamic_cast<MergedChannel *>(channel.get());
+    if (merged == nullptr)
+    {
+        return ctx;
+    }
+
+    for (const auto &source : merged->getSourceChannels())
+    {
+        if (ctx.twitchChannel == nullptr)
+        {
+            ctx.twitchChannel = dynamic_cast<TwitchChannel *>(source.get());
+        }
+        if (ctx.kickChannel == nullptr)
+        {
+            ctx.kickChannel = dynamic_cast<KickChannel *>(source.get());
+        }
+    }
+
+    // /ban and friends exist on both platforms, so the split's send selector
+    // decides which one a command means. On "Both" the command has to pick
+    // one, and Twitch is the primary.
+    switch (merged->getPlatformSelection())
+    {
+        case PlatformSelection::KickOnly:
+            ctx.twitchChannel = nullptr;
+            break;
+
+        case PlatformSelection::TwitchOnly:
+        case PlatformSelection::Both:
+            if (ctx.twitchChannel != nullptr)
+            {
+                ctx.kickChannel = nullptr;
+            }
+            break;
+    }
+
+    return ctx;
+}
+
+}  // namespace
 
 CommandController::CommandController(const Paths &paths)
 {
@@ -564,12 +620,7 @@ QString CommandController::execCommand(const QString &textNoEmoji,
             if (auto *command =
                     std::get_if<CommandFunctionWithContext>(&it->second))
             {
-                CommandContext ctx{
-                    words,
-                    channel,
-                    dynamic_cast<TwitchChannel *>(channel.get()),
-                    dynamic_cast<KickChannel *>(channel.get()),
-                };
+                CommandContext ctx = makeCommandContext(words, channel);
                 return (*command)(ctx);
             }
 

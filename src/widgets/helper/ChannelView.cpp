@@ -1,6 +1,7 @@
 #include "widgets/helper/ChannelView.hpp"
 
 #include "Application.hpp"
+#include "channels/MergedChannel.hpp"
 #include "common/Common.hpp"
 #include "common/QLogging.hpp"
 #include "controllers/accounts/AccountController.hpp"
@@ -2978,7 +2979,8 @@ void ChannelView::hideEvent(QHideEvent * /*event*/)
 }
 
 void ChannelView::showUserInfoPopup(const QString &userName,
-                                    QString alternativePopoutChannel)
+                                    QString alternativePopoutChannel,
+                                    bool fromKick)
 {
     if (!this->split_)
     {
@@ -2995,6 +2997,22 @@ void ChannelView::showUserInfoPopup(const QString &userName,
         getApp()->getTwitch()->getChannelOrEmpty(alternativePopoutChannel);
     auto openingChannel = this->hasSourceChannel() ? this->sourceChannel_
                                                    : this->underlyingChannel_;
+
+    // a merged split is not a channel anything can be done to, so act on
+    // whichever platform the clicked message actually came from
+    if (auto *merged = dynamic_cast<MergedChannel *>(openingChannel.get()))
+    {
+        for (const auto &source : merged->getSourceChannels())
+        {
+            auto isKick = source->getType() == Channel::Type::Kick;
+            if (isKick == fromKick)
+            {
+                openingChannel = source;
+                break;
+            }
+        }
+    }
+
     userPopup->setData(userName, contextChannel, openingChannel);
 
     QPoint offset(userPopup->width() / 3, userPopup->height() / 5);
@@ -3044,7 +3062,9 @@ void ChannelView::handleLinkClick(QMouseEvent *event, const Link &link,
         case Link::UserWhisper:
         case Link::UserInfo: {
             auto user = link.value;
-            this->showUserInfoPopup(user, layout->getMessage()->channelName);
+            this->showUserInfoPopup(
+                user, layout->getMessage()->channelName,
+                layout->getMessage()->flags.has(MessageFlag::Kick));
         }
         break;
 
