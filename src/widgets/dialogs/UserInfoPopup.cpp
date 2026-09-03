@@ -575,21 +575,11 @@ UserInfoPopup::UserInfoPopup(bool closeAutomatically, Split *split)
         // we only connect once
         std::ignore =
             this->userStateChanged_.connect([this, lineMod, timeout]() mutable {
-                TwitchChannel *twitchChannel = dynamic_cast<TwitchChannel *>(
-                    this->underlyingChannel_.get());
+                // hasModRights is virtual, so this covers Kick as well
+                bool visible = this->underlyingChannel_ != nullptr &&
+                               this->underlyingChannel_->hasModRights() &&
+                               !this->isMyself();
 
-                bool visible = false;
-                if (twitchChannel)
-                {
-                    bool isMyself =
-                        getApp()
-                            ->getAccounts()
-                            ->twitch.getCurrent()
-                            ->getUserName()
-                            .compare(this->userName_, Qt::CaseInsensitive) == 0;
-                    bool hasModRights = twitchChannel->hasModRights();
-                    visible = hasModRights && !isMyself;
-                }
                 lineMod->setVisible(visible);
                 timeout->setVisible(visible);
             });
@@ -1519,6 +1509,21 @@ void UserInfoPopup::TimeoutWidget::paintEvent(QPaintEvent *)
 
     //    painter.drawLine(0, this->height() / 2, this->width(), this->height()
     //    / 2);
+}
+
+bool UserInfoPopup::isMyself() const
+{
+    // whichever account this channel belongs to is the one to compare against
+    if (this->underlyingChannel_ != nullptr &&
+        this->underlyingChannel_->getType() == Channel::Type::Kick)
+    {
+        auto username = getApp()->getAccounts()->kick.getCurrentUsername();
+        return !username.isEmpty() &&
+               username.compare(this->userName_, Qt::CaseInsensitive) == 0;
+    }
+
+    return getApp()->getAccounts()->twitch.getCurrent()->getUserName().compare(
+               this->userName_, Qt::CaseInsensitive) == 0;
 }
 
 void UserInfoPopup::updateAvatarUrl()

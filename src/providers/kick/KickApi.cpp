@@ -152,6 +152,16 @@ void KickApi::resolveChannelInfo(const QString &channelSlug,
     request.setHeader(QNetworkRequest::UserAgentHeader, "Chatterino7");
     request.setRawHeader("Accept", "application/json");
 
+    // the response only carries a "role" for the caller when it knows who is
+    // asking, and that role is what tells us whether we can moderate here
+    if (this->account_ && this->account_->isAuthenticated())
+    {
+        request.setRawHeader("Authorization",
+                             QString("Bearer %1")
+                                 .arg(this->account_->getAccessToken())
+                                 .toUtf8());
+    }
+
     QNetworkReply *reply = this->networkManager_->get(request);
 
     QObject::connect(
