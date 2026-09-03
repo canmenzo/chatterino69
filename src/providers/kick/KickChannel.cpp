@@ -14,6 +14,7 @@
 #include "providers/kick/KickAccount.hpp"
 #include "providers/kick/KickApi.hpp"
 #include "providers/kick/KickBadges.hpp"
+#include "providers/kick/KickChatServer.hpp"
 #include "providers/kick/KickEmotes.hpp"
 #include "providers/kick/KickWebSocket.hpp"
 #include "providers/seventv/SeventvAPI.hpp"
@@ -190,56 +191,38 @@ void KickChannel::connect()
 
     this->setConnectionState(KickConnectionState::Connecting);
 
-    // Initialize WebSocket if needed
-    if (!this->webSocket_)
+    // every Kick channel shares one socket, so this may already be up
+    auto *server = getApp()->getKickChatServer();
+    server->ensureConnected();
+    if (server->isConnected())
     {
-        this->webSocket_ = std::make_unique<KickWebSocket>();
-
-        // Connect signals
-        std::ignore = this->webSocket_->messageReceived.connect(
-            [this](const KickMessage &msg) {
-                this->onMessageReceived(msg);
-            });
-
-        std::ignore = this->webSocket_->connectionStateChanged.connect(
-            [this](bool connected) {
-                if (connected)
-                {
-                    // Connection established, now resolve channel and subscribe
-                    this->resolveAndSubscribe();
-                }
-                else
-                {
-                    this->setConnectionState(KickConnectionState::Disconnected);
-                    this->addSystemMessage("Disconnected from Kick chat");
-                }
-            });
-
-        std::ignore =
-            this->webSocket_->errorOccurred.connect([this](const QString &) {
-                this->addSystemMessage(
-                    translateKickError(KickError::ConnectionFailed));
-                this->handleConnectionError();
-            });
+        this->onServerConnected();
     }
+}
 
-    // Connect to WebSocket
-    if (!this->webSocket_->connect())
-    {
-        this->setConnectionState(KickConnectionState::Failed);
-        this->addSystemMessage(translateKickError(KickError::ConnectionFailed));
-    }
+void KickChannel::onServerConnected()
+{
+    this->resolveAndSubscribe();
+}
+
+void KickChannel::onServerDisconnected()
+{
+    this->setConnectionState(KickConnectionState::Disconnected);
+    this->addSystemMessage("Disconnected from Kick chat");
+}
+
+void KickChannel::onServerError()
+{
+    this->addSystemMessage(translateKickError(KickError::ConnectionFailed));
+    this->handleConnectionError();
 }
 
 void KickChannel::disconnect()
 {
-    if (this->webSocket_)
+    // runs from the destructor too, which can outlive the Application
+    if (auto *app = tryGetApp())
     {
-        if (this->chatroomId_ != 0)
-        {
-            this->webSocket_->unsubscribe(this->chatroomId_);
-        }
-        this->webSocket_->disconnect();
+        app->getKickChatServer()->leave(this);
     }
     this->setConnectionState(KickConnectionState::Disconnected);
 }
@@ -737,9 +720,12 @@ void KickChannel::resolveAndSubscribe()
                 << "broadcasterUserId=" << this->broadcasterUserId_
                 << "isLive=" << this->isLive_;
 
-            if (this->webSocket_ && this->webSocket_->isConnected())
+            auto *server = getApp()->getKickChatServer();
+            if (server->isConnected())
             {
-                this->webSocket_->subscribe(this->chatroomId_);
+                server->subscribeChatroom(
+                    this->chatroomId_, std::dynamic_pointer_cast<KickChannel>(
+                                           this->shared_from_this()));
                 this->setConnectionState(KickConnectionState::Connected);
 
                 QString statusMsg = QString("Connected to Kick channel: %1")

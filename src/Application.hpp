@@ -50,6 +50,7 @@ class BttvEmotes;
 class BttvLiveUpdates;
 class FfzEmotes;
 class KickEmotes;
+class KickChatServer;
 class SeventvEmotes;
 class SeventvEventAPI;
 class ILinkResolver;
@@ -113,6 +114,7 @@ public:
     virtual BttvLiveUpdates *getBttvLiveUpdates() = 0;
     virtual FfzEmotes *getFfzEmotes() = 0;
     virtual KickEmotes *getKickEmotes() = 0;
+    virtual KickChatServer *getKickChatServer() = 0;
     virtual SeventvEmotes *getSeventvEmotes() = 0;
     virtual SeventvEventAPI *getSeventvEventAPI() = 0;
     virtual ILinkResolver *getLinkResolver() = 0;
@@ -185,6 +187,7 @@ private:
     std::unique_ptr<BttvLiveUpdates> bttvLiveUpdates;
     std::unique_ptr<FfzEmotes> ffzEmotes;
     std::unique_ptr<KickEmotes> kickEmotes;
+    std::unique_ptr<KickChatServer> kickChatServer;
     std::unique_ptr<SeventvEmotes> seventvEmotes;
     std::unique_ptr<SeventvEventAPI> seventvEventAPI;
     std::unique_ptr<ILinkResolver> linkResolver;
@@ -240,6 +243,7 @@ public:
     BttvLiveUpdates *getBttvLiveUpdates() override;
     FfzEmotes *getFfzEmotes() override;
     KickEmotes *getKickEmotes() override;
+    KickChatServer *getKickChatServer() override;
     SeventvEmotes *getSeventvEmotes() override;
     SeventvEventAPI *getSeventvEventAPI() override;
     pronouns::Pronouns *getPronouns() override;

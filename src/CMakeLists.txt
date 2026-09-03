@@ -531,6 +531,8 @@ set(SOURCE_FILES
         providers/kick/KickBadges.hpp
         providers/kick/KickChannel.cpp
         providers/kick/KickChannel.hpp
+        providers/kick/KickChatServer.cpp
+        providers/kick/KickChatServer.hpp
         providers/kick/KickEmotes.cpp
         providers/kick/KickEmotes.hpp
         providers/kick/KickMessage.cpp

@@ -5,6 +5,7 @@
 #include "providers/kick/KickAccount.hpp"
 #include "providers/kick/KickApi.hpp"
 #include "providers/kick/KickChannel.hpp"
+#include "providers/kick/KickChatServer.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/Settings.hpp"
@@ -215,7 +216,8 @@ void MergeChannelDialog::onMergeClicked()
     else if (platform == "kick")
     {
         // Create KickChannel with account and API for sending messages
-        auto kickChannel = std::make_shared<KickChannel>(targetChannelName);
+        auto kickChannel =
+            getApp()->getKickChatServer()->getOrCreate(targetChannelName);
 
         // Set up authentication from current Kick account
         auto kickAccount = getApp()->getAccounts()->kick.getCurrent();
