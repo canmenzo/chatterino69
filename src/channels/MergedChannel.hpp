@@ -66,6 +66,12 @@ public:
     /// Check if a specific platform is available in this merged channel
     [[nodiscard]] bool hasPlatform(Channel::Type type) const;
 
+    /// The source channel for a platform. Actions taken on a message (banning
+    /// its author, running a command on it) have to reach the platform it came
+    /// from, since the merge itself is not a channel anything can be done to.
+    /// Null if this merge carries no channel of that type.
+    [[nodiscard]] ChannelPtr sourceForPlatform(Channel::Type type) const;
+
     /// Signal emitted when platform selection changes
     pajlada::Signals::Signal<PlatformSelection> platformSelectionChanged;
 

@@ -176,6 +176,15 @@ TEST_F(MergedChannelTest, HasPlatformReturnsCorrectly)
     EXPECT_FALSE(mergedChannel->hasPlatform(Channel::Type::None));
 }
 
+TEST_F(MergedChannelTest, SourceForPlatformPicksTheRightChannel)
+{
+    EXPECT_EQ(mergedChannel->sourceForPlatform(Channel::Type::Twitch),
+              twitchChannel);
+    EXPECT_EQ(mergedChannel->sourceForPlatform(Channel::Type::Kick),
+              kickChannel);
+    EXPECT_EQ(mergedChannel->sourceForPlatform(Channel::Type::None), nullptr);
+}
+
 TEST_F(MergedChannelTest, GetSourceChannelsReturnsAll)
 {
     const auto &sources = mergedChannel->getSourceChannels();

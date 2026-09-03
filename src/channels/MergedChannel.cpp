@@ -303,6 +303,18 @@ bool MergedChannel::hasPlatform(Channel::Type type) const
     return false;
 }
 
+ChannelPtr MergedChannel::sourceForPlatform(Channel::Type type) const
+{
+    for (const auto &channel : this->sourceChannels_)
+    {
+        if (channel->getType() == type)
+        {
+            return channel;
+        }
+    }
+    return {};
+}
+
 void MergedChannel::subscribeToChannel(const ChannelPtr &channel)
 {
     Channel::Type sourceType = channel->getType();
