@@ -173,4 +173,78 @@ void query(const QString &operationName, const QString &document,
         std::move(onSuccess), std::move(onFailure));
 }
 
+void voteInPoll(const QString &pollId, const QString &choiceId,
+                const QString &userId, std::function<void()> onSuccess,
+                FailureCallback onFailure)
+{
+    static const char *document = R"(
+        mutation VoteInPoll($input: VoteInPollInput!) {
+            voteInPoll(input: $input) {
+                error {
+                    code
+                }
+            }
+        }
+    )";
+
+    QJsonObject input{
+        {"pollID", pollId},
+        {"choiceID", choiceId},
+        {"userID", userId},
+        {"voteID", QUuid::createUuid().toString(QUuid::WithoutBraces)},
+    };
+
+    query(
+        "VoteInPoll", document, {{"input", input}},
+        [onSuccess = std::move(onSuccess), onFailure](const QJsonObject &data) {
+            // the mutation reports refusals in its own payload, not in errors
+            auto code = data.value("voteInPoll")
+                            .toObject()
+                            .value("error")
+                            .toObject()
+                            .value("code")
+                            .toString();
+            if (!code.isEmpty())
+            {
+                onFailure(code);
+                return;
+            }
+            onSuccess();
+        },
+        std::move(onFailure));
+}
+
+void makePrediction(const QString &eventId, const QString &outcomeId,
+                    int points, std::function<void()> onSuccess,
+                    FailureCallback onFailure)
+{
+    QJsonObject input{
+        {"eventID", eventId},
+        {"outcomeID", outcomeId},
+        {"points", points},
+        {"transactionID",
+         QUuid::createUuid().toString(QUuid::WithoutBraces).remove('-')},
+    };
+
+    persistedQuery(
+        "MakePrediction",
+        "b44682ecc88358817009f20e69d75081b1e58825bb40aa53d5dbadcc17c881d8",
+        {{"input", input}},
+        [onSuccess = std::move(onSuccess), onFailure](const QJsonObject &data) {
+            auto error = data.value("makePrediction")
+                             .toObject()
+                             .value("error")
+                             .toObject()
+                             .value("code")
+                             .toString();
+            if (!error.isEmpty())
+            {
+                onFailure(error);
+                return;
+            }
+            onSuccess();
+        },
+        std::move(onFailure));
+}
+
 }  // namespace chatterino::gql

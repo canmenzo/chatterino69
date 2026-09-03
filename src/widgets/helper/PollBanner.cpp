@@ -1,10 +1,15 @@
 #include "widgets/helper/PollBanner.hpp"
 
+#include "Application.hpp"
+#include "controllers/accounts/AccountController.hpp"
+#include "providers/twitch/api/TwitchGql.hpp"
+#include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "singletons/Theme.hpp"
 #include "util/FormatTime.hpp"
 
 #include <QLabel>
+#include <QMouseEvent>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -95,9 +100,19 @@ void PollBanner::refresh()
     {
         auto *label = new QLabel(this);
         label->setTextFormat(Qt::PlainText);
+        label->installEventFilter(this);
         this->choices_->addWidget(label);
         this->choiceLabels_.push_back(label);
     }
+
+    this->pollId_ = poll->id;
+    this->choiceIds_.clear();
+    for (const auto &choice : poll->choices)
+    {
+        this->choiceIds_.push_back(choice.id);
+    }
+
+    auto canVote = gql::isEnabled();
 
     for (size_t i = 0; i < this->choiceLabels_.size(); i++)
     {
@@ -105,6 +120,9 @@ void PollBanner::refresh()
         if (i < poll->choices.size())
         {
             label->setText(formatChoice(poll->choices[i], poll->totalVotes));
+            label->setCursor(canVote ? Qt::PointingHandCursor
+                                     : Qt::ArrowCursor);
+            label->setToolTip(canVote ? "Click to vote" : QString());
             label->show();
         }
         else
@@ -147,6 +165,56 @@ void PollBanner::updateCountdown()
 
     this->remaining_->setText(formatTime(static_cast<int>(secondsLeft)));
     this->remaining_->show();
+}
+
+bool PollBanner::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::MouseButtonRelease &&
+        static_cast<QMouseEvent *>(event)->button() == Qt::LeftButton)
+    {
+        for (size_t i = 0; i < this->choiceLabels_.size(); i++)
+        {
+            if (this->choiceLabels_[i] == watched)
+            {
+                this->voteFor(i);
+                return true;
+            }
+        }
+    }
+
+    return BaseWidget::eventFilter(watched, event);
+}
+
+void PollBanner::voteFor(size_t choiceIndex)
+{
+    if (choiceIndex >= this->choiceIds_.size() || this->pollId_.isEmpty())
+    {
+        return;
+    }
+
+    auto channel = this->channel_;
+    auto unavailable = gql::unavailableReason();
+    if (!unavailable.isEmpty())
+    {
+        channel->addSystemMessage(unavailable);
+        return;
+    }
+
+    auto account = getApp()->getAccounts()->twitch.getCurrent();
+    if (account->isAnon())
+    {
+        channel->addSystemMessage("You must be logged in to vote in a poll.");
+        return;
+    }
+
+    gql::voteInPoll(
+        this->pollId_, this->choiceIds_[choiceIndex], account->getUserId(),
+        [channel] {
+            channel->addSystemMessage("Voted.");
+        },
+        [channel](const QString &error) {
+            channel->addSystemMessage("Could not vote: " + error);
+        });
 }
 
 void PollBanner::themeChangedEvent()

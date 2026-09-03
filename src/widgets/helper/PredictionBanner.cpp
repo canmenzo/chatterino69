@@ -1,11 +1,15 @@
 #include "widgets/helper/PredictionBanner.hpp"
 
+#include "Application.hpp"
+#include "providers/twitch/api/TwitchGql.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "singletons/Theme.hpp"
 #include "util/FormatTime.hpp"
 #include "util/Helpers.hpp"
 
+#include <QInputDialog>
 #include <QLabel>
+#include <QMouseEvent>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -120,9 +124,20 @@ void PredictionBanner::refresh()
     {
         auto *label = new QLabel(this);
         label->setTextFormat(Qt::PlainText);
+        label->installEventFilter(this);
         this->outcomes_->addWidget(label);
         this->outcomeLabels_.push_back(label);
     }
+
+    this->eventId_ = prediction->id;
+    this->outcomeIds_.clear();
+    for (const auto &outcome : prediction->outcomes)
+    {
+        this->outcomeIds_.push_back(outcome.id);
+    }
+
+    // a locked prediction still shows, but no longer takes entries
+    this->acceptsEntries_ = prediction->isActive() && gql::isEnabled();
 
     for (size_t i = 0; i < this->outcomeLabels_.size(); i++)
     {
@@ -140,6 +155,10 @@ void PredictionBanner::refresh()
         label->setText(formatOutcome(outcome, prediction->totalPoints, won));
         label->setStyleSheet(QStringLiteral("QLabel { color: %1 }")
                                  .arg(colorFor(outcome.color).name()));
+        label->setCursor(this->acceptsEntries_ ? Qt::PointingHandCursor
+                                               : Qt::ArrowCursor);
+        label->setToolTip(this->acceptsEntries_ ? "Click to predict"
+                                                : QString());
         label->show();
     }
 
@@ -178,6 +197,63 @@ void PredictionBanner::updateCountdown()
 
     this->remaining_->setText(formatTime(static_cast<int>(secondsLeft)));
     this->remaining_->show();
+}
+
+bool PredictionBanner::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::MouseButtonRelease &&
+        static_cast<QMouseEvent *>(event)->button() == Qt::LeftButton)
+    {
+        for (size_t i = 0; i < this->outcomeLabels_.size(); i++)
+        {
+            if (this->outcomeLabels_[i] == watched)
+            {
+                this->predictOn(i);
+                return true;
+            }
+        }
+    }
+
+    return BaseWidget::eventFilter(watched, event);
+}
+
+void PredictionBanner::predictOn(size_t outcomeIndex)
+{
+    if (!this->acceptsEntries_ || outcomeIndex >= this->outcomeIds_.size() ||
+        this->eventId_.isEmpty())
+    {
+        return;
+    }
+
+    auto channel = this->channel_;
+    auto unavailable = gql::unavailableReason();
+    if (!unavailable.isEmpty())
+    {
+        channel->addSystemMessage(unavailable);
+        return;
+    }
+
+    bool accepted = false;
+    auto points = QInputDialog::getInt(
+        this, "Predict",
+        "Channel points to put on \"" +
+            this->outcomeLabels_[outcomeIndex]->text().section("  ", 0, 0) +
+            "\":",
+        100, 1, 250000, 10, &accepted);
+    if (!accepted)
+    {
+        return;
+    }
+
+    gql::makePrediction(
+        this->eventId_, this->outcomeIds_[outcomeIndex], points,
+        [channel, points] {
+            channel->addSystemMessage(
+                QString("Put %1 points on the prediction.").arg(points));
+        },
+        [channel](const QString &error) {
+            channel->addSystemMessage("Could not predict: " + error);
+        });
 }
 
 void PredictionBanner::themeChangedEvent()
