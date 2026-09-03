@@ -77,6 +77,8 @@ set(SOURCE_FILES
 
         controllers/commands/builtin/chatterino/Debugging.cpp
         controllers/commands/builtin/chatterino/Debugging.hpp
+        controllers/commands/builtin/twitch/ChannelPoints.cpp
+        controllers/commands/builtin/twitch/ChannelPoints.hpp
         controllers/commands/builtin/twitch/Pin.cpp
         controllers/commands/builtin/twitch/Pin.hpp
         providers/twitch/api/TwitchGql.cpp

@@ -10,6 +10,7 @@
 #include "controllers/commands/builtin/twitch/Announce.hpp"
 #include "controllers/commands/builtin/twitch/Ban.hpp"
 #include "controllers/commands/builtin/twitch/Block.hpp"
+#include "controllers/commands/builtin/twitch/ChannelPoints.hpp"
 #include "controllers/commands/builtin/twitch/ChatSettings.hpp"
 #include "controllers/commands/builtin/twitch/Chatters.hpp"
 #include "controllers/commands/builtin/twitch/DeleteMessages.hpp"
@@ -405,6 +406,8 @@ CommandController::CommandController(const Paths &paths)
     this->registerCommand("/delete", &commands::deleteOneMessage);
 
     this->registerCommand("/pin", &commands::pinMessage);
+
+    this->registerCommand("/redeem", &commands::redeemChannelPoints);
 
     this->registerCommand("/unpin", &commands::unpinMessage);
 

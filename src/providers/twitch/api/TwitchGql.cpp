@@ -17,6 +17,11 @@ using namespace chatterino;
 constexpr int TIMEOUT_MS = 20000;
 constexpr const char *ENDPOINT = "https://gql.twitch.tv/gql";
 constexpr const char *WEB_CLIENT_ID = "kimne78kx3ncx6brgo4mv6wki5h1ko";
+constexpr const char *TV_CLIENT_ID = "ue6666qo983tsx6so1t0vnawi233wa";
+constexpr const char *TV_ORIGIN = "https://android.tv.twitch.tv";
+constexpr const char *TV_USER_AGENT =
+    "Mozilla/5.0 (Linux; Android 7.1; Smart Box C1) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36";
 
 /// Twitch expects a stable per-install id on these requests.
 QString deviceId()
@@ -26,16 +31,27 @@ QString deviceId()
     return id;
 }
 
-NetworkRequest makeRequest(const QJsonObject &payload)
+NetworkRequest makeRequest(const QJsonObject &payload, gql::Client client)
 {
-    return NetworkRequest(ENDPOINT, NetworkRequestType::Post)
-        .timeout(TIMEOUT_MS)
-        .header("Client-Id", WEB_CLIENT_ID)
-        .header("Content-Type", "application/json")
-        .header("X-Device-Id", deviceId().toUtf8())
-        .header("Authorization", ("OAuth " + gql::token()).toUtf8())
-        .payload(
-            QJsonDocument(QJsonArray{payload}).toJson(QJsonDocument::Compact));
+    auto request =
+        NetworkRequest(ENDPOINT, NetworkRequestType::Post)
+            .timeout(TIMEOUT_MS)
+            .header("Content-Type", "application/json")
+            .header("X-Device-Id", deviceId().toUtf8())
+            .header("Authorization", ("OAuth " + gql::token()).toUtf8())
+            .payload(QJsonDocument(QJsonArray{payload})
+                         .toJson(QJsonDocument::Compact));
+
+    if (client == gql::Client::AndroidTV)
+    {
+        return std::move(request)
+            .header("Client-Id", TV_CLIENT_ID)
+            .header("Origin", TV_ORIGIN)
+            .header("Referer", QString(TV_ORIGIN) + "/")
+            .header("User-Agent", TV_USER_AGENT);
+    }
+
+    return std::move(request).header("Client-Id", WEB_CLIENT_ID);
 }
 
 /// gql answers a batched request with an array of results.
@@ -49,7 +65,7 @@ QJsonObject firstResult(const QJsonValue &response)
 }
 
 void run(const QJsonObject &payload, gql::SuccessCallback onSuccess,
-         gql::FailureCallback onFailure)
+         gql::FailureCallback onFailure, gql::Client client)
 {
     auto reason = gql::unavailableReason();
     if (!reason.isEmpty())
@@ -58,7 +74,7 @@ void run(const QJsonObject &payload, gql::SuccessCallback onSuccess,
         return;
     }
 
-    makeRequest(payload)
+    makeRequest(payload, client)
         .onSuccess([onSuccess = std::move(onSuccess),
                     onFailure](const NetworkResult &result) mutable {
             auto root = firstResult(result.parseJsonValue());
@@ -146,7 +162,7 @@ QString firstError(const QJsonObject &response)
 
 void persistedQuery(const QString &operationName, const QString &sha256Hash,
                     const QJsonObject &variables, SuccessCallback onSuccess,
-                    FailureCallback onFailure)
+                    FailureCallback onFailure, Client client)
 {
     run(
         QJsonObject{
@@ -157,12 +173,12 @@ void persistedQuery(const QString &operationName, const QString &sha256Hash,
                  {"persistedQuery",
                   QJsonObject{{"version", 1}, {"sha256Hash", sha256Hash}}}}},
         },
-        std::move(onSuccess), std::move(onFailure));
+        std::move(onSuccess), std::move(onFailure), client);
 }
 
 void query(const QString &operationName, const QString &document,
            const QJsonObject &variables, SuccessCallback onSuccess,
-           FailureCallback onFailure)
+           FailureCallback onFailure, Client client)
 {
     run(
         QJsonObject{
@@ -170,7 +186,7 @@ void query(const QString &operationName, const QString &document,
             {"query", document},
             {"variables", variables},
         },
-        std::move(onSuccess), std::move(onFailure));
+        std::move(onSuccess), std::move(onFailure), client);
 }
 
 void voteInPoll(const QString &pollId, const QString &choiceId,
@@ -245,6 +261,110 @@ void makePrediction(const QString &eventId, const QString &outcomeId,
             onSuccess();
         },
         std::move(onFailure));
+}
+
+void channelPointsContext(
+    const QString &channelLogin,
+    std::function<void(qint64 balance, std::vector<ChannelPointReward>)>
+        onSuccess,
+    FailureCallback onFailure)
+{
+    QJsonObject variables{
+        {"channelLogin", channelLogin},
+        {"includeGoalTypes", QJsonArray{"CREATOR", "BOOST"}},
+    };
+
+    persistedQuery(
+        "ChannelPointsContext",
+        "7fe050e3761eb2cf258d70ee1a21cbd76fa8cf3d7e7b12fc437e7029d446b5e3",
+        variables,
+        [onSuccess = std::move(onSuccess)](const QJsonObject &data) {
+            auto channel = data.value("community").toObject().isEmpty()
+                               ? data.value("channel").toObject()
+                               : data.value("community")
+                                     .toObject()
+                                     .value("channel")
+                                     .toObject();
+
+            auto balance = static_cast<qint64>(channel.value("self")
+                                                   .toObject()
+                                                   .value("communityPoints")
+                                                   .toObject()
+                                                   .value("balance")
+                                                   .toDouble());
+
+            std::vector<ChannelPointReward> rewards;
+            auto settings = channel.value("communityPointsSettings").toObject();
+            for (const auto &value : settings.value("customRewards").toArray())
+            {
+                auto object = value.toObject();
+                if (!object.value("isEnabled").toBool(true) ||
+                    object.value("isPaused").toBool(false))
+                {
+                    continue;
+                }
+
+                ChannelPointReward reward;
+                reward.id = object.value("id").toString();
+                reward.title = object.value("title").toString();
+                reward.prompt = object.value("prompt").toString();
+                reward.cost = object.value("cost").toInt();
+                reward.needsInput =
+                    object.value("isUserInputRequired").toBool();
+
+                if (!reward.id.isEmpty())
+                {
+                    rewards.push_back(std::move(reward));
+                }
+            }
+
+            onSuccess(balance, std::move(rewards));
+        },
+        std::move(onFailure), Client::AndroidTV);
+}
+
+void redeemChannelPointReward(const QString &channelId,
+                              const ChannelPointReward &reward,
+                              const QString &textInput,
+                              std::function<void()> onSuccess,
+                              FailureCallback onFailure)
+{
+    QJsonObject input{
+        {"channelID", channelId},
+        {"cost", reward.cost},
+        {"pricingType", "POINTS"},
+        {"rewardID", reward.id},
+        {"title", reward.title},
+        {"transactionID",
+         QUuid::createUuid().toString(QUuid::WithoutBraces).remove('-')},
+        {"prompt", reward.prompt.trimmed().isEmpty()
+                       ? QJsonValue(QJsonValue::Null)
+                       : QJsonValue(reward.prompt)},
+    };
+    if (!textInput.trimmed().isEmpty())
+    {
+        input["textInput"] = textInput;
+    }
+
+    persistedQuery(
+        "RedeemCustomReward",
+        "d56249a7adb4978898ea3412e196688d4ac3cea1c0c2dfd65561d229ea5dcc42",
+        {{"input", input}},
+        [onSuccess = std::move(onSuccess), onFailure](const QJsonObject &data) {
+            auto error = data.value("redeemCommunityPointsCustomReward")
+                             .toObject()
+                             .value("error")
+                             .toObject()
+                             .value("code")
+                             .toString();
+            if (!error.isEmpty())
+            {
+                onFailure(error);
+                return;
+            }
+            onSuccess();
+        },
+        std::move(onFailure), Client::AndroidTV);
 }
 
 }  // namespace chatterino::gql
