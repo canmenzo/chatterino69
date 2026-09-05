@@ -50,6 +50,9 @@ private:
     void onMergeClicked();
 
     ChannelPtr sourceChannel_;
+    /// Name to prefill and suggest. For a merged source this is one of
+    /// its sources rather than the combined display name.
+    QString suggestedName_;
     ChannelPtr selectedChannel_;
     std::function<void(ChannelPtr, ChannelPtr)> onMergeCallback_;
     std::function<void(ChannelPtr, ChannelPtr)> onSplitViewCallback_;

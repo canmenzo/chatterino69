@@ -1,5 +1,7 @@
 #include "widgets/dialogs/MergeChannelDialog.hpp"
 
+#include "channels/MergedChannel.hpp"
+
 #include "Application.hpp"
 #include "controllers/accounts/AccountController.hpp"
 #include "providers/kick/KickAccount.hpp"
@@ -59,7 +61,21 @@ void MergeChannelDialog::setupUI()
     QString sourcePlatform;
     QString sourceChannelName = this->sourceChannel_->getName();
 
-    if (dynamic_cast<TwitchChannel *>(this->sourceChannel_.get()))
+    auto *mergedSource =
+        dynamic_cast<MergedChannel *>(this->sourceChannel_.get());
+
+    if (mergedSource != nullptr)
+    {
+        sourcePlatform = "Merged";
+        // A merge shows its own combined name; suggesting a channel to add is
+        // more useful when based on one of its existing sources.
+        const auto &sources = mergedSource->getSourceChannels();
+        if (!sources.empty())
+        {
+            sourceChannelName = sources.front()->getName();
+        }
+    }
+    else if (dynamic_cast<TwitchChannel *>(this->sourceChannel_.get()))
     {
         sourcePlatform = "Twitch";
     }
@@ -76,8 +92,13 @@ void MergeChannelDialog::setupUI()
         sourcePlatform = "Unknown";
     }
 
+    this->suggestedName_ = sourceChannelName;
+
     this->sourceLabel_ = new QLabel(
-        QString("Source: %1 - %2").arg(sourcePlatform, sourceChannelName));
+        mergedSource != nullptr
+            ? QString("Source: %1").arg(this->sourceChannel_->getDisplayName())
+            : QString("Source: %1 - %2").arg(sourcePlatform,
+                                             sourceChannelName));
     this->sourceLabel_->setStyleSheet("font-weight: bold;");
     this->mainLayout_->addWidget(this->sourceLabel_);
 
@@ -88,16 +109,29 @@ void MergeChannelDialog::setupUI()
     auto *platformLayout = new QHBoxLayout();
 
     this->platformCombo_ = new QComboBox();
-    // Only show platforms different from source
-    if (sourcePlatform != "Twitch")
+
+    // Offer every platform the source does not already carry. For a merge that
+    // means every type not already in it, which is what makes adding YouTube to
+    // a Twitch+Kick split possible.
+    auto alreadyHave = [mergedSource, &sourcePlatform](Channel::Type type,
+                                                       const QString &name) {
+        if (mergedSource != nullptr)
+        {
+            return mergedSource->hasPlatform(type);
+        }
+        return sourcePlatform == name;
+    };
+
+    if (!alreadyHave(Channel::Type::Twitch, "Twitch"))
     {
         this->platformCombo_->addItem("Twitch", "twitch");
     }
-    if (sourcePlatform != "Kick" && getSettings()->enableKickIntegration)
+    if (!alreadyHave(Channel::Type::Kick, "Kick") &&
+        getSettings()->enableKickIntegration)
     {
         this->platformCombo_->addItem("Kick", "kick");
     }
-    if (sourcePlatform != "YouTube" &&
+    if (!alreadyHave(Channel::Type::YouTube, "YouTube") &&
         getSettings()->enableYouTubeIntegration)
     {
         this->platformCombo_->addItem("YouTube", "youtube");
@@ -178,7 +212,11 @@ void MergeChannelDialog::setupUI()
 
 void MergeChannelDialog::updateSuggestion()
 {
-    QString sourceChannelName = this->sourceChannel_->getName().toLower();
+    QString sourceChannelName = this->suggestedName_.isEmpty()
+                                    ? this->sourceChannel_->getName()
+                                    : this->suggestedName_;
+    QString suggestedDisplay = sourceChannelName;
+    sourceChannelName = sourceChannelName.toLower();
     QString inputText = this->channelInput_->text().trimmed().toLower();
 
     if (inputText.isEmpty())
@@ -187,7 +225,7 @@ void MergeChannelDialog::updateSuggestion()
         this->suggestionLabel_->setText(
             QString("Suggestion: Try '%1' (same username)")
                 .arg(sourceChannelName));
-        this->channelInput_->setText(this->sourceChannel_->getName());
+        this->channelInput_->setText(suggestedDisplay);
     }
     else if (inputText == sourceChannelName)
     {
@@ -199,7 +237,7 @@ void MergeChannelDialog::updateSuggestion()
     {
         this->suggestionLabel_->setText(
             QString("Note: Merging '%1' with '%2'")
-                .arg(this->sourceChannel_->getName(), inputText));
+                .arg(suggestedDisplay, inputText));
         this->suggestionLabel_->setStyleSheet(
             "color: #888; font-style: italic;");
     }
@@ -217,6 +255,15 @@ void MergeChannelDialog::onMergeClicked()
     }
 
     QString platform = this->platformCombo_->currentData().toString();
+
+    if (platform.isEmpty())
+    {
+        QMessageBox::warning(
+            this, "Nothing left to merge",
+            "This split already carries every platform you have enabled.\n\n"
+            "Enable another platform in Settings > Platforms to add one.");
+        return;
+    }
 
     // Get or create the target channel
     if (platform == "twitch")

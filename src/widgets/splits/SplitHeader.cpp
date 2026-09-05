@@ -538,7 +538,8 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
     menu->addSeparator();
 
     // Merge with another channel (T058-T061)
-    if (getSettings()->enableKickIntegration)
+    if (getSettings()->enableKickIntegration ||
+        getSettings()->enableYouTubeIntegration)
     {
         auto *mergeAction = menu->addAction("Merge with...", this, [this]() {
             auto *dialog =
@@ -546,6 +547,19 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
 
             // Single view (combined) - creates a MergedChannel
             dialog->setOnMerge([this](ChannelPtr source, ChannelPtr target) {
+                // Merging into a split that is already merged adds a third
+                // platform to it. Wrapping it in another MergedChannel would
+                // nest a merge inside a merge, which loses the per-platform
+                // send routing and the platform badges.
+                if (auto existing =
+                        std::dynamic_pointer_cast<MergedChannel>(source))
+                {
+                    existing->addSourceChannel(target);
+                    this->split_->setChannel(
+                        IndirectChannel(existing, Channel::Type::Merged));
+                    return;
+                }
+
                 // Create merged channel
                 std::vector<ChannelPtr> sources = {source, target};
                 auto mergedChannel = std::make_shared<MergedChannel>(
@@ -570,10 +584,13 @@ std::unique_ptr<QMenu> SplitHeader::createMainMenu()
             dialog->show();
         });
 
-        // Enable merge only for Twitch or Kick channels
+        // Any single-platform channel can start a merge, and an existing
+        // merge can take another platform on top.
         auto channelType = this->split_->getChannel()->getType();
         mergeAction->setEnabled(channelType == Channel::Type::Twitch ||
-                                channelType == Channel::Type::Kick);
+                                channelType == Channel::Type::Kick ||
+                                channelType == Channel::Type::YouTube ||
+                                channelType == Channel::Type::Merged);
 
         // T099: Unmerge option for merged channels
         if (channelType == Channel::Type::Merged)
