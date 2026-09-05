@@ -6,13 +6,13 @@ namespace chatterino {
 
 class GeneralPageView;
 
-/// Look-and-feel basics: theme, font, zoom, window and tab behaviour.
-class GeneralPage : public ScrollableSettingsPage
+/// Emote providers, sizing and autocompletion.
+class EmotesPage : public ScrollableSettingsPage
 {
     Q_OBJECT
 
 public:
-    GeneralPage();
+    EmotesPage();
 
 private:
     void initLayout(GeneralPageView &layout) override;

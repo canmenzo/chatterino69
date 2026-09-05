@@ -6,13 +6,13 @@ namespace chatterino {
 
 class GeneralPageView;
 
-/// Look-and-feel basics: theme, font, zoom, window and tab behaviour.
-class GeneralPage : public ScrollableSettingsPage
+/// Chat behaviour: timestamps, pausing, scrolling, links and channel events.
+class ChatPage : public ScrollableSettingsPage
 {
     Q_OBJECT
 
 public:
-    GeneralPage();
+    ChatPage();
 
 private:
     void initLayout(GeneralPageView &layout) override;

@@ -6,13 +6,13 @@ namespace chatterino {
 
 class GeneralPageView;
 
-/// Look-and-feel basics: theme, font, zoom, window and tab behaviour.
-class GeneralPage : public ScrollableSettingsPage
+/// Per-platform integration settings for Twitch and Kick.
+class PlatformsPage : public ScrollableSettingsPage
 {
     Q_OBJECT
 
 public:
-    GeneralPage();
+    PlatformsPage();
 
 private:
     void initLayout(GeneralPageView &layout) override;

@@ -850,6 +850,21 @@ set(SOURCE_FILES
 
         widgets/settingspages/AboutPage.cpp
         widgets/settingspages/AboutPage.hpp
+        widgets/settingspages/AdvancedPage.cpp
+        widgets/settingspages/AdvancedPage.hpp
+        widgets/settingspages/AppearancePage.cpp
+        widgets/settingspages/AppearancePage.hpp
+        widgets/settingspages/ChatPage.cpp
+        widgets/settingspages/ChatPage.hpp
+        widgets/settingspages/EmotesPage.cpp
+        widgets/settingspages/EmotesPage.hpp
+        widgets/settingspages/PlatformsPage.cpp
+        widgets/settingspages/PlatformsPage.hpp
+        widgets/settingspages/ScrollableSettingsPage.cpp
+        widgets/settingspages/ScrollableSettingsPage.hpp
+        widgets/settingspages/StreamerModePage.cpp
+        widgets/settingspages/StreamerModePage.hpp
+        widgets/settingspages/SettingsPageCommon.hpp
         widgets/settingspages/AccountsPage.cpp
         widgets/settingspages/AccountsPage.hpp
         widgets/settingspages/CommandPage.cpp

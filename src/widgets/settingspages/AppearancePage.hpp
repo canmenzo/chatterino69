@@ -6,13 +6,13 @@ namespace chatterino {
 
 class GeneralPageView;
 
-/// Look-and-feel basics: theme, font, zoom, window and tab behaviour.
-class GeneralPage : public ScrollableSettingsPage
+/// How messages, badges and the overlay are drawn.
+class AppearancePage : public ScrollableSettingsPage
 {
     Q_OBJECT
 
 public:
-    GeneralPage();
+    AppearancePage();
 
 private:
     void initLayout(GeneralPageView &layout) override;
