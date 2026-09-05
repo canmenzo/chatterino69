@@ -122,20 +122,29 @@ void MergeChannelDialog::setupUI()
         return sourcePlatform == name;
     };
 
-    if (!alreadyHave(Channel::Type::Twitch, "Twitch"))
-    {
-        this->platformCombo_->addItem("Twitch", "twitch");
-    }
-    if (!alreadyHave(Channel::Type::Kick, "Kick") &&
-        getSettings()->enableKickIntegration)
-    {
-        this->platformCombo_->addItem("Kick", "kick");
-    }
-    if (!alreadyHave(Channel::Type::YouTube, "YouTube") &&
-        getSettings()->enableYouTubeIntegration)
-    {
-        this->platformCombo_->addItem("YouTube", "youtube");
-    }
+    // A platform that is turned off is still listed, marked so, and offers to
+    // enable itself on merge. Hiding it left the combo empty on a Twitch+Kick
+    // merge with no hint that a third platform was available at all.
+    auto addPlatform = [this](Channel::Type type, const QString &label,
+                              const QString &data, bool present,
+                              bool enabled) {
+        Q_UNUSED(type);
+        if (present)
+        {
+            return;
+        }
+        this->platformCombo_->addItem(
+            enabled ? label : label + "  (enable in settings)", data);
+    };
+
+    addPlatform(Channel::Type::Twitch, "Twitch", "twitch",
+                alreadyHave(Channel::Type::Twitch, "Twitch"), true);
+    addPlatform(Channel::Type::Kick, "Kick", "kick",
+                alreadyHave(Channel::Type::Kick, "Kick"),
+                getSettings()->enableKickIntegration);
+    addPlatform(Channel::Type::YouTube, "YouTube", "youtube",
+                alreadyHave(Channel::Type::YouTube, "YouTube"),
+                getSettings()->enableYouTubeIntegration);
     platformLayout->addWidget(this->platformCombo_);
 
     this->channelInput_ = new QLineEdit();
@@ -167,7 +176,7 @@ void MergeChannelDialog::setupUI()
     this->mainLayout_->addWidget(this->singleViewRadio_);
 
     this->singleViewDescription_ = new QLabel(
-        "   Messages from both channels interleaved with [T]/[K] indicators");
+        "   Messages interleaved in one panel, each tagged with its platform");
     this->singleViewDescription_->setStyleSheet(
         "color: #888; font-size: 11px; margin-left: 20px;");
     this->mainLayout_->addWidget(this->singleViewDescription_);
@@ -262,6 +271,40 @@ void MergeChannelDialog::onMergeClicked()
             this, "Nothing left to merge",
             "This split already carries every platform you have enabled.\n\n"
             "Enable another platform in Settings > Platforms to add one.");
+        return;
+    }
+
+    // Turning the platform on here keeps the merge flow going instead of
+    // sending the user to the settings page and back.
+    auto ensureEnabled = [this](BoolSetting &setting, const QString &name) {
+        if (setting)
+        {
+            return true;
+        }
+
+        QMessageBox box;
+        box.setWindowTitle(QString("%1 Integration Disabled").arg(name));
+        box.setText(QString("%1 integration is currently disabled. Would you "
+                            "like to enable it?")
+                        .arg(name));
+        box.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+        box.setDefaultButton(QMessageBox::Yes);
+        if (box.exec() != QMessageBox::Yes)
+        {
+            return false;
+        }
+        setting.setValue(true);
+        return true;
+    };
+
+    if (platform == "kick" &&
+        !ensureEnabled(getSettings()->enableKickIntegration, "Kick"))
+    {
+        return;
+    }
+    if (platform == "youtube" &&
+        !ensureEnabled(getSettings()->enableYouTubeIntegration, "YouTube"))
+    {
         return;
     }
 
