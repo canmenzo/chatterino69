@@ -651,6 +651,9 @@ public:
     /// Kick Integration
     BoolSetting enableKickIntegration = {"/kick/enabled", false};
 
+    /// YouTube Integration
+    BoolSetting enableYouTubeIntegration = {"/youtube/enabled", false};
+
     /// Usercard
     BoolSetting showUsercardNameHistoryButton = {
         "/usercard/showNameHistoryButton", true};

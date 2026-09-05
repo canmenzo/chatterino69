@@ -547,6 +547,20 @@ set(SOURCE_FILES
         providers/kick/KickOAuthFlow.hpp
         providers/kick/KickWebSocket.cpp
         providers/kick/KickWebSocket.hpp
+        providers/youtube/YouTubeAccount.cpp
+        providers/youtube/YouTubeAccount.hpp
+        providers/youtube/YouTubeApi.cpp
+        providers/youtube/YouTubeApi.hpp
+        providers/youtube/YouTubeChannel.cpp
+        providers/youtube/YouTubeChannel.hpp
+        providers/youtube/YouTubeChatServer.cpp
+        providers/youtube/YouTubeChatServer.hpp
+        providers/youtube/YouTubeInnerTube.cpp
+        providers/youtube/YouTubeInnerTube.hpp
+        providers/youtube/YouTubeMessage.cpp
+        providers/youtube/YouTubeOAuthFlow.cpp
+        providers/youtube/YouTubeOAuthFlow.hpp
+        providers/youtube/YouTubeMessage.hpp
 
         singletons/CrashHandler.cpp
         singletons/CrashHandler.hpp

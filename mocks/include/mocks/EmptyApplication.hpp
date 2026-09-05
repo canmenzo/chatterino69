@@ -266,6 +266,13 @@ public:
         return nullptr;
     }
 
+    YouTubeChatServer *getYouTubeChatServer() override
+    {
+        assert(false && "EmptyApplication::getYouTubeChatServer was called "
+                        "without being initialized");
+        return nullptr;
+    }
+
     SeventvEmotes *getSeventvEmotes() override
     {
         assert(false && "EmptyApplication::getSeventvEmotes was called without "

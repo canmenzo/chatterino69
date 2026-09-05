@@ -17,9 +17,10 @@ using EmotePtr = std::shared_ptr<const Emote>;
 
 /// Platform selection for sending messages in a merged channel
 enum class PlatformSelection {
-    Both,        // Send to all platforms
-    TwitchOnly,  // Send only to Twitch
-    KickOnly,    // Send only to Kick
+    Both,         // Send to all platforms
+    TwitchOnly,   // Send only to Twitch
+    KickOnly,     // Send only to Kick
+    YouTubeOnly,  // Send only to YouTube
 };
 
 /// A virtual channel that combines messages from multiple source channels
@@ -88,11 +89,16 @@ private:
     /// Get platform prefix for display
     static QString getPlatformPrefix(Channel::Type type);
 
+    /// Human-readable platform name, for status and error lines.
+    static QString platformDisplayName(Channel::Type type);
+
     /// Create a platform indicator badge emote using favicon
     static EmotePtr makePlatformBadge(Channel::Type type);
 
-    /// Create a combined platform badge for messages sent to both platforms
-    static EmotePtr makeBothPlatformBadge();
+    /// Create a combined badge for a message the user sent to every platform
+    /// in the merge. Twitch+Kick keeps its dedicated icon; any merge involving
+    /// YouTube uses the generic three-platform one.
+    static EmotePtr makeBothPlatformBadge(bool includesYouTube);
 
     /// Add a system message to the merged channel
     void addSystemMessage(const QString &text);

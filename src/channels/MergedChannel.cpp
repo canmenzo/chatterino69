@@ -86,6 +86,9 @@ void MergedChannel::sendMessage(const QString &message)
             case PlatformSelection::KickOnly:
                 shouldSend = (channel->getType() == Channel::Type::Kick);
                 break;
+            case PlatformSelection::YouTubeOnly:
+                shouldSend = (channel->getType() == Channel::Type::YouTube);
+                break;
         }
 
         if (shouldSend)
@@ -153,11 +156,10 @@ void MergedChannel::sendMessage(const QString &message)
             statusParts.append(QString("%1✗").arg(platform));
 
             // T076: Show per-platform send errors
-            this->addSystemMessage(QString("%1: %2")
-                                       .arg(result.type == Channel::Type::Twitch
-                                                ? "Twitch"
-                                                : "Kick")
-                                       .arg(result.error));
+            this->addSystemMessage(
+                QString("%1: %2")
+                    .arg(MergedChannel::platformDisplayName(result.type))
+                    .arg(result.error));
         }
     }
 
@@ -199,6 +201,10 @@ bool MergedChannel::canSendMessage() const
                 break;
             case PlatformSelection::KickOnly:
                 matchesPlatform = (channel->getType() == Channel::Type::Kick);
+                break;
+            case PlatformSelection::YouTubeOnly:
+                matchesPlatform =
+                    (channel->getType() == Channel::Type::YouTube);
                 break;
         }
 
@@ -348,11 +354,17 @@ void MergedChannel::onSourceMessageReceived(MessagePtr message,
             {
                 // First echo - show with "Both" badge
                 auto clonedMessage = message->clone();
+                bool includesYouTube =
+                    this->hasPlatform(Channel::Type::YouTube);
                 clonedMessage->flags.set(MessageFlag::Twitch);
                 clonedMessage->flags.set(MessageFlag::Kick);
+                if (includesYouTube)
+                {
+                    clonedMessage->flags.set(MessageFlag::YouTube);
+                }
 
-                // Add "Both" platform badge (Twick)
-                auto bothBadge = makeBothPlatformBadge();
+                // Add the combined platform badge
+                auto bothBadge = makeBothPlatformBadge(includesYouTube);
                 if (bothBadge)
                 {
                     auto badgeElement = std::make_unique<BadgeElement>(
@@ -395,8 +407,7 @@ void MergedChannel::onSourceMessageReceived(MessagePtr message,
                 // Second echo - suppress duplicate
                 qCDebug(chatterinoCommon)
                     << "Suppressed duplicate sent message from"
-                    << (sourceType == Channel::Type::Twitch ? "Twitch"
-                                                            : "Kick");
+                    << MergedChannel::platformDisplayName(sourceType);
             }
             return;
         }
@@ -413,6 +424,10 @@ void MergedChannel::onSourceMessageReceived(MessagePtr message,
     else if (sourceType == Channel::Type::Kick)
     {
         clonedMessage->flags.set(MessageFlag::Kick);
+    }
+    else if (sourceType == Channel::Type::YouTube)
+    {
+        clonedMessage->flags.set(MessageFlag::YouTube);
     }
 
     // Add platform favicon badge after the timestamp
@@ -464,6 +479,8 @@ QString MergedChannel::getPlatformPrefix(Channel::Type type)
             return "T";
         case Channel::Type::Kick:
             return "K";
+        case Channel::Type::YouTube:
+            return "Y";
         default:
             return "?";
     }
@@ -520,13 +537,72 @@ EmotePtr MergedChannel::makePlatformBadge(Channel::Type type)
             }();
             return kickEmote;
         }
+        case Channel::Type::YouTube: {
+            static auto youtubeEmote = []() -> EmotePtr {
+                static const QPixmap pixmap(":/platforms/youtube.png");
+                if (pixmap.isNull())
+                {
+                    qCWarning(chatterinoCommon)
+                        << "Failed to load YouTube platform badge from "
+                           ":/platforms/youtube.png";
+                    return nullptr;
+                }
+                auto image =
+                    Image::fromResourcePixmap(pixmap, PLATFORM_BADGE_SCALE);
+                return std::make_shared<Emote>(Emote{
+                    .name = EmoteName{"[YouTube]"},
+                    .images = ImageSet{image},
+                    .tooltip = Tooltip{"Message from YouTube"},
+                    .homePage = Url{"https://www.youtube.com"},
+                });
+            }();
+            return youtubeEmote;
+        }
         default:
             return nullptr;
     }
 }
 
-EmotePtr MergedChannel::makeBothPlatformBadge()
+QString MergedChannel::platformDisplayName(Channel::Type type)
 {
+    switch (type)
+    {
+        case Channel::Type::Twitch:
+            return QStringLiteral("Twitch");
+        case Channel::Type::Kick:
+            return QStringLiteral("Kick");
+        case Channel::Type::YouTube:
+            return QStringLiteral("YouTube");
+        default:
+            return QStringLiteral("Unknown");
+    }
+}
+
+EmotePtr MergedChannel::makeBothPlatformBadge(bool includesYouTube)
+{
+    if (includesYouTube)
+    {
+        static auto allEmote = []() -> EmotePtr {
+            static const QPixmap pixmap(":/platforms/allplatforms.png");
+            if (pixmap.isNull())
+            {
+                qCWarning(chatterinoCommon)
+                    << "Failed to load combined platform badge from "
+                       ":/platforms/allplatforms.png";
+                return nullptr;
+            }
+            auto image =
+                Image::fromResourcePixmap(pixmap, PLATFORM_BADGE_SCALE);
+            return std::make_shared<Emote>(Emote{
+                .name = EmoteName{"[All]"},
+                .images = ImageSet{image},
+                .tooltip = Tooltip{"Message sent to every merged platform"},
+                .homePage = Url{},
+            });
+        }();
+        return allEmote;
+    }
+
     // Load Twick (Twitch+Kick combined) favicon from local resources (cached as static)
     static auto twickEmote = []() -> EmotePtr {
         static const QPixmap pixmap(":/platforms/twick.png");

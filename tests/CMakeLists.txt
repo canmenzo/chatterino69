@@ -66,6 +66,7 @@ set(test_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/FunctionRef.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/KickApi.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/KickBadges.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/YouTubeInnerTube.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/KickChannel.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/KickMessage.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/KickOAuthFlow.cpp
