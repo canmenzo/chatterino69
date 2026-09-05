@@ -6,6 +6,8 @@
 #include "providers/kick/KickApi.hpp"
 #include "providers/kick/KickChannel.hpp"
 #include "providers/kick/KickChatServer.hpp"
+#include "providers/youtube/YouTubeChannel.hpp"
+#include "providers/youtube/YouTubeChatServer.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/Settings.hpp"
@@ -65,6 +67,10 @@ void MergeChannelDialog::setupUI()
     {
         sourcePlatform = "Kick";
     }
+    else if (dynamic_cast<YouTubeChannel *>(this->sourceChannel_.get()))
+    {
+        sourcePlatform = "YouTube";
+    }
     else
     {
         sourcePlatform = "Unknown";
@@ -90,6 +96,11 @@ void MergeChannelDialog::setupUI()
     if (sourcePlatform != "Kick" && getSettings()->enableKickIntegration)
     {
         this->platformCombo_->addItem("Kick", "kick");
+    }
+    if (sourcePlatform != "YouTube" &&
+        getSettings()->enableYouTubeIntegration)
+    {
+        this->platformCombo_->addItem("YouTube", "youtube");
     }
     platformLayout->addWidget(this->platformCombo_);
 
@@ -212,6 +223,13 @@ void MergeChannelDialog::onMergeClicked()
     {
         this->selectedChannel_ =
             getApp()->getTwitch()->getOrAddChannel(targetChannelName);
+    }
+    else if (platform == "youtube")
+    {
+        auto youtubeChannel =
+            getApp()->getYouTubeChatServer()->getOrCreate(targetChannelName);
+        youtubeChannel->connect();
+        this->selectedChannel_ = ChannelPtr(youtubeChannel);
     }
     else if (platform == "kick")
     {

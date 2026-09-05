@@ -11,6 +11,8 @@
 #include "providers/kick/KickApi.hpp"
 #include "providers/kick/KickChannel.hpp"
 #include "providers/kick/KickChatServer.hpp"
+#include "providers/youtube/YouTubeChannel.hpp"
+#include "providers/youtube/YouTubeChatServer.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/Paths.hpp"
 #include "singletons/Settings.hpp"
@@ -759,6 +761,11 @@ void WindowManager::encodeChannel(IndirectChannel channel, QJsonObject &obj)
             obj.insert("name", channel.get()->getName());
         }
         break;
+        case Channel::Type::YouTube: {
+            obj.insert("type", "youtube");
+            obj.insert("name", channel.get()->getName());
+        }
+        break;
         case Channel::Type::Merged: {
             obj.insert("type", "merged");
             obj.insert("name", channel.get()->getName());
@@ -778,6 +785,10 @@ void WindowManager::encodeChannel(IndirectChannel channel, QJsonObject &obj)
                     else if (source->getType() == Channel::Type::Kick)
                     {
                         sourceObj.insert("type", "kick");
+                    }
+                    else if (source->getType() == Channel::Type::YouTube)
+                    {
+                        sourceObj.insert("type", "youtube");
                     }
                     sourceObj.insert("name", source->getName());
                     sources.append(sourceObj);
@@ -859,6 +870,15 @@ IndirectChannel WindowManager::decodeChannel(const SplitDescriptor &descriptor)
         ChannelPtr channel = std::static_pointer_cast<Channel>(kickChannel);
         return IndirectChannel(channel, Channel::Type::Kick);
     }
+    else if (descriptor.type_ == "youtube")
+    {
+        auto youtubeChannel =
+            getApp()->getYouTubeChatServer()->getOrCreate(descriptor.channelName_);
+        youtubeChannel->connect();
+
+        ChannelPtr channel = std::static_pointer_cast<Channel>(youtubeChannel);
+        return IndirectChannel(channel, Channel::Type::YouTube);
+    }
     else if (descriptor.type_ == "merged")
     {
         // Reconstruct merged channel from saved source channels
@@ -879,6 +899,13 @@ IndirectChannel WindowManager::decodeChannel(const SplitDescriptor &descriptor)
             if (source.type == "twitch")
             {
                 channel = getApp()->getTwitch()->getOrAddChannel(source.name);
+            }
+            else if (source.type == "youtube")
+            {
+                auto youtubeChannel =
+                    getApp()->getYouTubeChatServer()->getOrCreate(source.name);
+                youtubeChannel->connect();
+                channel = std::static_pointer_cast<Channel>(youtubeChannel);
             }
             else if (source.type == "kick")
             {

@@ -7,6 +7,10 @@
 #include "controllers/hotkeys/HotkeyCategory.hpp"
 #include "controllers/hotkeys/HotkeyController.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
+#include "providers/youtube/YouTubeAccount.hpp"
+#include "providers/youtube/YouTubeApi.hpp"
+#include "providers/youtube/YouTubeChatServer.hpp"
+#include "providers/youtube/YouTubeOAuthFlow.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/CrashHandler.hpp"
 #include "singletons/Fonts.hpp"
@@ -176,6 +180,131 @@ void PlatformsPage::initLayout(GeneralPageView &layout)
                     QString("Login failed: %1").arg(error));
                 kickStatusLabel->setStyleSheet("color: #ff4444;");
             });
+    }
+
+    layout.addTitle("YouTube Integration");
+    layout.addDescription(
+        "Read YouTube live chat and merge it with Twitch and Kick in one "
+        "split. Reading needs no account at all. Signing in is only required "
+        "to <em>send</em> messages.");
+
+    SettingWidget::checkbox("Enable YouTube integration",
+                            s.enableYouTubeIntegration)
+        ->setTooltip(
+            "When enabled you can add YouTube live chats by @handle, channel "
+            "URL, or video ID, and merge them with Twitch and Kick channels.")
+        ->addTo(layout);
+
+    {
+        auto *youtubeAccountLayout = new QHBoxLayout();
+
+        auto *youtubeStatusLabel = new QLabel();
+        youtubeAccountLayout->addWidget(youtubeStatusLabel);
+
+        auto *youtubeLoginButton = new QPushButton("Sign in with Google");
+        youtubeLoginButton->setToolTip(
+            "Sending uses the official YouTube Data API, which needs your own "
+            "OAuth client.\n"
+            "Create a Desktop app client in the Google Cloud console, then "
+            "set\n"
+            "CHATTERINO_YOUTUBE_CLIENT_ID and CHATTERINO_YOUTUBE_CLIENT_SECRET.");
+        youtubeAccountLayout->addWidget(youtubeLoginButton);
+
+        auto *youtubeLogoutButton = new QPushButton("Sign out");
+        youtubeAccountLayout->addWidget(youtubeLogoutButton);
+
+        youtubeAccountLayout->addStretch();
+        layout.addLayout(youtubeAccountLayout);
+
+        auto updateYouTubeUI = [youtubeStatusLabel, youtubeLoginButton,
+                                youtubeLogoutButton] {
+            auto *server = getApp()->getYouTubeChatServer();
+            bool signedIn = server->isSignedIn();
+            bool configured = YouTubeApi::hasClientCredentials();
+
+            if (signedIn)
+            {
+                auto name = server->account()->getDisplayName();
+                youtubeStatusLabel->setText(
+                    name.isEmpty()
+                        ? QStringLiteral("Signed in to YouTube")
+                        : QStringLiteral("Signed in as %1").arg(name));
+                youtubeStatusLabel->setStyleSheet("color: #2ba644;");
+            }
+            else if (!configured)
+            {
+                youtubeStatusLabel->setText(
+                    "Sending disabled: CHATTERINO_YOUTUBE_CLIENT_ID and "
+                    "_SECRET are not set");
+                youtubeStatusLabel->setStyleSheet("color: #888;");
+            }
+            else
+            {
+                youtubeStatusLabel->setText("Not signed in (reading still "
+                                            "works)");
+                youtubeStatusLabel->setStyleSheet("color: #888;");
+            }
+
+            youtubeLoginButton->setEnabled(configured && !signedIn);
+            youtubeLogoutButton->setEnabled(signedIn);
+            youtubeLogoutButton->setVisible(signedIn);
+        };
+
+        updateYouTubeUI();
+
+        QObject::connect(
+            youtubeLoginButton, &QPushButton::clicked,
+            [youtubeStatusLabel, updateYouTubeUI] {
+                auto *flow = new YouTubeOAuthFlow(getApp()->getYouTubeChatServer()
+                                                      ->api()
+                                                      .get());
+
+                QObject::connect(
+                    flow, &YouTubeOAuthFlow::codeReceived,
+                    [flow, updateYouTubeUI, youtubeStatusLabel](
+                        const QString &code, const QString &redirectUri) {
+                        getApp()->getYouTubeChatServer()->api()->exchangeCode(
+                            code, redirectUri,
+                            [flow, updateYouTubeUI,
+                             youtubeStatusLabel](bool ok, QString error) {
+                                if (!ok)
+                                {
+                                    youtubeStatusLabel->setText(
+                                        QStringLiteral("Login failed: %1")
+                                            .arg(error));
+                                    youtubeStatusLabel->setStyleSheet(
+                                        "color: #ff4444;");
+                                }
+                                else
+                                {
+                                    updateYouTubeUI();
+                                }
+                                flow->deleteLater();
+                            });
+                    });
+
+                QObject::connect(flow, &YouTubeOAuthFlow::failed,
+                                 [flow, youtubeStatusLabel](
+                                     const QString &error) {
+                                     youtubeStatusLabel->setText(
+                                         QStringLiteral("Login failed: %1")
+                                             .arg(error));
+                                     youtubeStatusLabel->setStyleSheet(
+                                         "color: #ff4444;");
+                                     flow->deleteLater();
+                                 });
+
+                youtubeStatusLabel->setText(
+                    "Waiting for Google in your browser...");
+                youtubeStatusLabel->setStyleSheet("color: #888;");
+                flow->start();
+            });
+
+        QObject::connect(youtubeLogoutButton, &QPushButton::clicked,
+                         [updateYouTubeUI] {
+                             getApp()->getYouTubeChatServer()->signOut();
+                             updateYouTubeUI();
+                         });
     }
 
     layout.addStretch();

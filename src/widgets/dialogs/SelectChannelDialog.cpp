@@ -7,6 +7,8 @@
 #include "providers/kick/KickApi.hpp"
 #include "providers/kick/KickChannel.hpp"
 #include "providers/kick/KickChatServer.hpp"
+#include "providers/youtube/YouTubeChannel.hpp"
+#include "providers/youtube/YouTubeChatServer.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/Fonts.hpp"
 #include "singletons/Settings.hpp"
@@ -62,6 +64,7 @@ SelectChannelDialog::SelectChannelDialog(QWidget *parent)
     ui.platformSelector = new QComboBox();
     ui.platformSelector->addItem("Twitch", "twitch");
     ui.platformSelector->addItem("Kick", "kick");
+    ui.platformSelector->addItem("YouTube", "youtube");
     ui.platformSelector->setVisible(false);
     layout->addWidget(ui.platformSelector);
 
@@ -76,6 +79,12 @@ SelectChannelDialog::SelectChannelDialog(QWidget *parent)
                          {
                              ui.channelLabel->setText(
                                  "Join a Kick channel by username or URL");
+                         }
+                         else if (platform == "youtube")
+                         {
+                             ui.channelLabel->setText(
+                                 "Join a YouTube live chat by @handle, channel "
+                                 "URL, or video ID");
                          }
                          else
                          {
@@ -95,9 +104,11 @@ SelectChannelDialog::SelectChannelDialog(QWidget *parent)
             ui.channelName->setVisible(enabled);
             ui.channelLabel->setVisible(enabled);
 
-            // Show platform selector if Kick integration is enabled
+            // Show the platform selector once any extra platform is on
             bool kickEnabled = getSettings()->enableKickIntegration;
-            ui.platformSelector->setVisible(enabled && kickEnabled);
+            bool youtubeEnabled = getSettings()->enableYouTubeIntegration;
+            ui.platformSelector->setVisible(enabled &&
+                                            (kickEnabled || youtubeEnabled));
 
             if (enabled)
             {
@@ -285,6 +296,36 @@ IndirectChannel SelectChannelDialog::getSelectedChannel() const
     {
         QString channelText = this->ui_.channelName->text().trimmed();
         QString platform = this->ui_.platformSelector->currentData().toString();
+
+        if (platform == "youtube")
+        {
+            if (!getSettings()->enableYouTubeIntegration)
+            {
+                QMessageBox msgBox;
+                msgBox.setWindowTitle("YouTube Integration Disabled");
+                msgBox.setText(
+                    "YouTube integration is currently disabled. Would you like "
+                    "to enable it?\n\n"
+                    "You can enable it in Settings -> Platforms -> YouTube "
+                    "Integration.");
+                msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+                msgBox.setDefaultButton(QMessageBox::Yes);
+                if (msgBox.exec() == QMessageBox::Yes)
+                {
+                    getSettings()->enableYouTubeIntegration.setValue(true);
+                }
+                else
+                {
+                    return Channel::getEmpty();
+                }
+            }
+
+            // Reading needs no account, so this connects straight away.
+            auto youtubeChannel =
+                getApp()->getYouTubeChatServer()->getOrCreate(channelText);
+            youtubeChannel->connect();
+            return ChannelPtr(youtubeChannel);
+        }
 
         // Handle Kick channels
         if (platform == "kick")
