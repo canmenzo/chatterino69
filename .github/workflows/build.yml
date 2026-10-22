@@ -74,7 +74,7 @@ jobs:
           cd /tmp/qtwebsockets-build
           "$Qt6_DIR/bin/qt-configure-module" /tmp/qtwebsockets
           cmake --build . --parallel
-          sudo cmake --install .
+          sudo "$(command -v cmake)" --install .
 
       - name: Build
         run: |
