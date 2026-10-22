@@ -73,6 +73,9 @@ jobs:
           sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-18 42
 
       - name: Install Qt WebSockets module
+        env:
+          # Ubuntu 24.04's pip refuses system installs (PEP 668); older pip ignores this
+          PIP_BREAK_SYSTEM_PACKAGES: 1
         run: |
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get -y install python3-pip
