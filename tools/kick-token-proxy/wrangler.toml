@@ -1,0 +1,8 @@
+# Deploy: npx wrangler login
+#         npx wrangler secret put KICK_CLIENT_ID      (same id as KickOAuthFlow::DEFAULT_CLIENT_ID)
+#         npx wrangler secret put KICK_CLIENT_SECRET
+#         npx wrangler deploy
+name = "chatterino-kick-auth"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+routes = [{ pattern = "kick-auth.menzo.dev", custom_domain = true }]

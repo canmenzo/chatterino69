@@ -100,9 +100,9 @@ void PlatformsPage::initLayout(GeneralPageView &layout)
         auto *kickLoginButton = new QPushButton("Login with Kick");
         kickLoginButton->setEnabled(s.enableKickIntegration);
         kickLoginButton->setToolTip(
-            "Note: Kick OAuth requires a registered developer application.\n"
-            "Set CHATTERINO_KICK_CLIENT_ID environment variable with your\n"
-            "app's client ID. Without this, login will fail.");
+            "To use your own Kick developer app instead of the built-in one,\n"
+            "set the CHATTERINO_KICK_CLIENT_ID and\n"
+            "CHATTERINO_KICK_CLIENT_SECRET environment variables.");
         kickAccountLayout->addWidget(kickLoginButton);
 
         auto *kickLogoutButton = new QPushButton("Logout");

@@ -58,6 +58,23 @@ public:
         "http://localhost:52847/callback";
     static constexpr int LOCAL_SERVER_PORT = 52847;
 
+    // Kick requires a client secret on every token request, so it must not
+    // ship in the binary. The proxy (tools/kick-token-proxy) holds it.
+    static constexpr const char *DEFAULT_CLIENT_ID =
+        "01M12RRW76054A4KD2N76NJTBW";
+    static constexpr const char *TOKEN_PROXY_URL =
+        "https://kick-auth.menzo.dev/token";
+
+    struct ClientConfig {
+        QString clientId;
+        QString clientSecret;  // empty when going through the proxy
+        QString tokenUrl;
+    };
+
+    /// Own Kick app when CHATTERINO_KICK_CLIENT_ID and
+    /// CHATTERINO_KICK_CLIENT_SECRET are both set, otherwise the token proxy
+    static ClientConfig clientConfig();
+
     /// How long to wait for the browser round trip before giving up
     static constexpr int AUTH_TIMEOUT_MS = 300000;
 

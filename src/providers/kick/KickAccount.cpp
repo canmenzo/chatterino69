@@ -99,28 +99,20 @@ void KickAccount::doRefreshAccessToken(int retryAttempt)
 
     auto *manager = new QNetworkAccessManager();
 
-    QUrl tokenUrl(KickOAuthFlow::KICK_TOKEN_URL);
+    auto config = KickOAuthFlow::clientConfig();
+
+    QUrl tokenUrl(config.tokenUrl);
     QNetworkRequest request(tokenUrl);
     request.setHeader(QNetworkRequest::ContentTypeHeader,
                       "application/x-www-form-urlencoded");
 
-    // Get client ID from environment or compile-time define
-    QString clientId;
-#ifdef CHATTERINO_KICK_CLIENT_ID
-    clientId = QStringLiteral(CHATTERINO_KICK_CLIENT_ID);
-#endif
-    if (clientId.isEmpty())
-    {
-        clientId = qEnvironmentVariable("CHATTERINO_KICK_CLIENT_ID", "");
-    }
-    if (clientId.isEmpty())
-    {
-        clientId = QStringLiteral("chatterino7");  // Fallback
-    }
-
     QUrlQuery postData;
     postData.addQueryItem("grant_type", "refresh_token");
-    postData.addQueryItem("client_id", clientId);
+    postData.addQueryItem("client_id", config.clientId);
+    if (!config.clientSecret.isEmpty())
+    {
+        postData.addQueryItem("client_secret", config.clientSecret);
+    }
     postData.addQueryItem("refresh_token", this->refreshToken_);
 
     QNetworkReply *reply =

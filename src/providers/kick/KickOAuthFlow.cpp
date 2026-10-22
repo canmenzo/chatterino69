@@ -120,30 +120,24 @@ void KickOAuthFlow::generatePKCE()
     qCDebug(chatterinoKick) << "Generated PKCE code verifier and challenge";
 }
 
+KickOAuthFlow::ClientConfig KickOAuthFlow::clientConfig()
+{
+    auto id = qEnvironmentVariable("CHATTERINO_KICK_CLIENT_ID");
+    auto secret = qEnvironmentVariable("CHATTERINO_KICK_CLIENT_SECRET");
+    if (!id.isEmpty() && !secret.isEmpty())
+    {
+        return {id, secret, KICK_TOKEN_URL};
+    }
+    return {DEFAULT_CLIENT_ID, {}, TOKEN_PROXY_URL};
+}
+
 QString KickOAuthFlow::buildAuthorizationUrl() const
 {
     QUrl url(KICK_AUTH_URL);
     QUrlQuery query;
 
-    // Get client ID: compile-time define > environment variable > fallback
-    QString clientId;
-#ifdef CHATTERINO_KICK_CLIENT_ID
-    clientId = QStringLiteral(CHATTERINO_KICK_CLIENT_ID);
-#endif
-    if (clientId.isEmpty())
-    {
-        clientId = qEnvironmentVariable("CHATTERINO_KICK_CLIENT_ID", "");
-    }
-    if (clientId.isEmpty())
-    {
-        qCWarning(chatterinoKick)
-            << "No Kick Client ID configured. Kick OAuth will not work. "
-               "Set CHATTERINO_KICK_CLIENT_ID environment variable or rebuild "
-               "with -DCHATTERINO_KICK_CLIENT_ID=...";
-    }
-
     query.addQueryItem("response_type", "code");
-    query.addQueryItem("client_id", clientId);
+    query.addQueryItem("client_id", clientConfig().clientId);
     query.addQueryItem("redirect_uri", REDIRECT_URI);
     query.addQueryItem("scope",
                        "chat:write user:read channel:read moderation:ban");
@@ -404,51 +398,21 @@ void KickOAuthFlow::exchangeCodeForTokens(const QString &code)
 {
     qCDebug(chatterinoKick) << "Exchanging authorization code for tokens...";
 
-    // Get client credentials: compile-time define > environment variable
-    QString clientId;
-    QString clientSecret;
-
-#ifdef CHATTERINO_KICK_CLIENT_ID
-    clientId = QStringLiteral(CHATTERINO_KICK_CLIENT_ID);
-#endif
-    if (clientId.isEmpty())
-    {
-        clientId = qEnvironmentVariable("CHATTERINO_KICK_CLIENT_ID", "");
-    }
-
-#ifdef CHATTERINO_KICK_CLIENT_SECRET
-    clientSecret = QStringLiteral(CHATTERINO_KICK_CLIENT_SECRET);
-#endif
-    if (clientSecret.isEmpty())
-    {
-        clientSecret =
-            qEnvironmentVariable("CHATTERINO_KICK_CLIENT_SECRET", "");
-    }
-
-    if (clientId.isEmpty())
-    {
-        qCWarning(chatterinoKick)
-            << "No Kick Client ID configured. Token exchange will fail.";
-        this->authenticationFailed.invoke(
-            "Missing Kick Client ID - rebuild with credentials or set "
-            "environment variable");
-        this->cancel();
-        return;
-    }
+    auto config = clientConfig();
 
     QNetworkAccessManager *manager = new QNetworkAccessManager(this);
 
-    QUrl tokenUrl(KICK_TOKEN_URL);
+    QUrl tokenUrl(config.tokenUrl);
     QNetworkRequest request(tokenUrl);
     request.setHeader(QNetworkRequest::ContentTypeHeader,
                       "application/x-www-form-urlencoded");
 
     QUrlQuery postData;
     postData.addQueryItem("grant_type", "authorization_code");
-    postData.addQueryItem("client_id", clientId);
-    if (!clientSecret.isEmpty())
+    postData.addQueryItem("client_id", config.clientId);
+    if (!config.clientSecret.isEmpty())
     {
-        postData.addQueryItem("client_secret", clientSecret);
+        postData.addQueryItem("client_secret", config.clientSecret);
     }
     postData.addQueryItem("code", code);
     postData.addQueryItem("redirect_uri", REDIRECT_URI);
@@ -458,7 +422,8 @@ void KickOAuthFlow::exchangeCodeForTokens(const QString &code)
         manager->post(request, postData.toString(QUrl::FullyEncoded).toUtf8());
 
     QObject::connect(
-        reply, &QNetworkReply::finished, this, [this, reply, manager] {
+        reply, &QNetworkReply::finished, this,
+        [this, reply, manager, viaProxy = config.clientSecret.isEmpty()] {
             reply->deleteLater();
             manager->deleteLater();
 
@@ -466,9 +431,16 @@ void KickOAuthFlow::exchangeCodeForTokens(const QString &code)
             {
                 qCWarning(chatterinoKick)
                     << "Token exchange failed:" << reply->errorString();
-                this->authenticationFailed.invoke(
-                    QString("Token exchange failed: %1")
-                        .arg(reply->errorString()));
+                QString message = QString("Token exchange failed: %1")
+                                      .arg(reply->errorString());
+                if (viaProxy)
+                {
+                    message += " (Kick login service unavailable? To use "
+                               "your own Kick app, set "
+                               "CHATTERINO_KICK_CLIENT_ID and "
+                               "CHATTERINO_KICK_CLIENT_SECRET.)";
+                }
+                this->authenticationFailed.invoke(message);
                 this->cancel();
                 return;
             }

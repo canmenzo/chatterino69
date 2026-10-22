@@ -55,6 +55,36 @@ TEST(KickOAuthFlow, localServerPortIsValid)
     EXPECT_LT(port, 65536);  // Valid port range
 }
 
+TEST(KickOAuthFlow, clientConfigUsesProxyUnlessOwnAppIsSet)
+{
+    auto savedId = qgetenv("CHATTERINO_KICK_CLIENT_ID");
+    auto savedSecret = qgetenv("CHATTERINO_KICK_CLIENT_SECRET");
+
+    qunsetenv("CHATTERINO_KICK_CLIENT_ID");
+    qunsetenv("CHATTERINO_KICK_CLIENT_SECRET");
+    auto config = KickOAuthFlow::clientConfig();
+    EXPECT_EQ(config.clientId, KickOAuthFlow::DEFAULT_CLIENT_ID);
+    EXPECT_TRUE(config.clientSecret.isEmpty());
+    EXPECT_EQ(config.tokenUrl, KickOAuthFlow::TOKEN_PROXY_URL);
+
+    // An id without a secret cannot talk to Kick directly
+    qputenv("CHATTERINO_KICK_CLIENT_ID", "own-id");
+    EXPECT_EQ(KickOAuthFlow::clientConfig().tokenUrl,
+              KickOAuthFlow::TOKEN_PROXY_URL);
+
+    qputenv("CHATTERINO_KICK_CLIENT_SECRET", "own-secret");
+    config = KickOAuthFlow::clientConfig();
+    EXPECT_EQ(config.clientId, "own-id");
+    EXPECT_EQ(config.clientSecret, "own-secret");
+    EXPECT_EQ(config.tokenUrl, KickOAuthFlow::KICK_TOKEN_URL);
+
+    auto restore = [](const char *name, const QByteArray &value) {
+        return value.isEmpty() ? qunsetenv(name) : qputenv(name, value);
+    };
+    restore("CHATTERINO_KICK_CLIENT_ID", savedId);
+    restore("CHATTERINO_KICK_CLIENT_SECRET", savedSecret);
+}
+
 TEST(KickOAuthFlowTokens, defaultConstruction)
 {
     KickOAuthFlow::Tokens tokens;
