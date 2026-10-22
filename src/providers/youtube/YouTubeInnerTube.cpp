@@ -310,7 +310,8 @@ std::optional<YouTubeMessage> parseChatItem(const QJsonObject &item)
         parseCommonFields(r, msg);
         msg.kind = YouTubeItemKind::SuperChat;
         msg.runs = parseRuns(r.value("message").toObject());
-        msg.purchaseAmount = runsToText(r.value("purchaseAmountText").toObject());
+        msg.purchaseAmount =
+            runsToText(r.value("purchaseAmountText").toObject());
         msg.bodyColor = colorFromArgb(r.value("bodyBackgroundColor"));
         return msg;
     }
@@ -321,7 +322,8 @@ std::optional<YouTubeMessage> parseChatItem(const QJsonObject &item)
         YouTubeMessage msg;
         parseCommonFields(r, msg);
         msg.kind = YouTubeItemKind::SuperSticker;
-        msg.purchaseAmount = runsToText(r.value("purchaseAmountText").toObject());
+        msg.purchaseAmount =
+            runsToText(r.value("purchaseAmountText").toObject());
         msg.bodyColor = colorFromArgb(r.value("backgroundColor"));
         msg.eventHeadline = QStringLiteral("sent a Super Sticker");
         return msg;
@@ -396,8 +398,8 @@ QString YouTubeInnerTube::userAgent()
     return BROWSER_UA;
 }
 
-void YouTubeInnerTube::resolveVideoId(
-    const QString &input, std::function<void(QString, QString)> cb)
+void YouTubeInnerTube::resolveVideoId(const QString &input,
+                                      std::function<void(QString, QString)> cb)
 {
     auto trimmed = input.trimmed();
     if (trimmed.isEmpty())
@@ -422,7 +424,8 @@ void YouTubeInnerTube::resolveVideoId(
     if (url.startsWith(QStringLiteral("youtu.be/")))
     {
         auto id = url.mid(9).section('?', 0, 0).section('/', 0, 0);
-        cb(id, id.isEmpty() ? QStringLiteral("Could not read a video id") : QString{});
+        cb(id, id.isEmpty() ? QStringLiteral("Could not read a video id")
+                            : QString{});
         return;
     }
 
@@ -489,17 +492,19 @@ void YouTubeInnerTube::fetchLiveVideoIdForChannel(
         // is live right now, where the first "videoId" in the page can be a
         // sidebar recommendation.
         auto id = matchFirst(
-            html, QStringLiteral(
-                      R"RX(<link rel="canonical" href="[^"]*watch\?v=([A-Za-z0-9_-]{11}))RX"));
+            html,
+            QStringLiteral(
+                R"RX(<link rel="canonical" href="[^"]*watch\?v=([A-Za-z0-9_-]{11}))RX"));
         if (id.isEmpty())
         {
-            id = matchFirst(html,
-                            QStringLiteral(R"RX("videoId":"([A-Za-z0-9_-]{11})")RX"));
+            id = matchFirst(
+                html, QStringLiteral(R"RX("videoId":"([A-Za-z0-9_-]{11})")RX"));
         }
 
         if (id.isEmpty())
         {
-            cb({}, QStringLiteral("%1 does not look like it is live").arg(path));
+            cb({},
+               QStringLiteral("%1 does not look like it is live").arg(path));
             return;
         }
 
@@ -508,15 +513,13 @@ void YouTubeInnerTube::fetchLiveVideoIdForChannel(
 }
 
 void YouTubeInnerTube::openSession(
-    const QString &videoId,
-    std::function<void(YouTubeChatSession, QString)> cb)
+    const QString &videoId, std::function<void(YouTubeChatSession, QString)> cb)
 {
     auto url =
         QStringLiteral("https://www.youtube.com/live_chat?v=%1").arg(videoId);
     auto *reply = this->network_->get(pageRequest(url));
 
-    QObject::connect(reply, &QNetworkReply::finished, this, [reply, cb,
-                                                             videoId] {
+    QObject::connect(reply, &QNetworkReply::finished, this, [reply, cb, videoId] {
         reply->deleteLater();
 
         YouTubeChatSession session;
@@ -531,8 +534,8 @@ void YouTubeInnerTube::openSession(
 
         auto html = QString::fromUtf8(reply->readAll());
 
-        session.apiKey =
-            matchFirst(html, QStringLiteral(R"RX(INNERTUBE_API_KEY":"([^"]+))RX"));
+        session.apiKey = matchFirst(
+            html, QStringLiteral(R"RX(INNERTUBE_API_KEY":"([^"]+))RX"));
         session.clientVersion = matchFirst(
             html, QStringLiteral(R"RX(INNERTUBE_CLIENT_VERSION":"([^"]+))RX"));
 
@@ -552,7 +555,8 @@ void YouTubeInnerTube::openSession(
         // not empty on join. The live tail only yields messages from now on.
         // The view selector lists "Top chat" first and unfiltered "Live chat"
         // last, and we want the unfiltered one.
-        const auto reload = tokens.value(QStringLiteral("reloadContinuationData"));
+        const auto reload =
+            tokens.value(QStringLiteral("reloadContinuationData"));
         if (!reload.isEmpty())
         {
             session.continuation =
@@ -573,8 +577,12 @@ void YouTubeInnerTube::openSession(
         {
             // The page renders a plain message when chat is off or the stream
             // is over; surfacing it verbatim beats a generic failure.
-            auto reason = runsToText(
-                data.value("contents").toObject().value("messageRenderer").toObject().value("text").toObject());
+            auto reason = runsToText(data.value("contents")
+                                         .toObject()
+                                         .value("messageRenderer")
+                                         .toObject()
+                                         .value("text")
+                                         .toObject());
             cb(session, reason.isEmpty()
                             ? QStringLiteral("This stream has no live chat")
                             : reason);
@@ -604,8 +612,8 @@ void YouTubeInnerTube::poll(const YouTubeChatSession &session,
     req.setHeader(QNetworkRequest::ContentTypeHeader,
                   QStringLiteral("application/json"));
 
-    auto *reply =
-        this->network_->post(req, QJsonDocument{body}.toJson(QJsonDocument::Compact));
+    auto *reply = this->network_->post(
+        req, QJsonDocument{body}.toJson(QJsonDocument::Compact));
 
     QObject::connect(reply, &QNetworkReply::finished, this, [reply, cb] {
         reply->deleteLater();
@@ -684,8 +692,7 @@ void YouTubeInnerTube::poll(const YouTubeChatSession &session,
                         .value("targetItemId")
                         .toString());
             }
-            else if (action.contains(
-                         "markChatItemsByAuthorAsDeletedAction"))
+            else if (action.contains("markChatItemsByAuthorAsDeletedAction"))
             {
                 result.bannedAuthorIds.push_back(
                     action.value("markChatItemsByAuthorAsDeletedAction")
@@ -706,8 +713,7 @@ void YouTubeInnerTube::poll(const YouTubeChatSession &session,
                 {
                     continue;
                 }
-                result.nextContinuation =
-                    data.value("continuation").toString();
+                result.nextContinuation = data.value("continuation").toString();
                 auto timeout = data.value("timeoutMs").toInt();
                 if (timeout > 0)
                 {

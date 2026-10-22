@@ -1,17 +1,16 @@
 #include "widgets/dialogs/MergeChannelDialog.hpp"
 
-#include "channels/MergedChannel.hpp"
-
 #include "Application.hpp"
+#include "channels/MergedChannel.hpp"
 #include "controllers/accounts/AccountController.hpp"
 #include "providers/kick/KickAccount.hpp"
 #include "providers/kick/KickApi.hpp"
 #include "providers/kick/KickChannel.hpp"
 #include "providers/kick/KickChatServer.hpp"
-#include "providers/youtube/YouTubeChannel.hpp"
-#include "providers/youtube/YouTubeChatServer.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
+#include "providers/youtube/YouTubeChannel.hpp"
+#include "providers/youtube/YouTubeChatServer.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/WindowManager.hpp"
 
@@ -97,8 +96,8 @@ void MergeChannelDialog::setupUI()
     this->sourceLabel_ = new QLabel(
         mergedSource != nullptr
             ? QString("Source: %1").arg(this->sourceChannel_->getDisplayName())
-            : QString("Source: %1 - %2").arg(sourcePlatform,
-                                             sourceChannelName));
+            : QString("Source: %1 - %2")
+                  .arg(sourcePlatform, sourceChannelName));
     this->sourceLabel_->setStyleSheet("font-weight: bold;");
     this->mainLayout_->addWidget(this->sourceLabel_);
 
@@ -126,8 +125,7 @@ void MergeChannelDialog::setupUI()
     // enable itself on merge. Hiding it left the combo empty on a Twitch+Kick
     // merge with no hint that a third platform was available at all.
     auto addPlatform = [this](Channel::Type type, const QString &label,
-                              const QString &data, bool present,
-                              bool enabled) {
+                              const QString &data, bool present, bool enabled) {
         Q_UNUSED(type);
         if (present)
         {
@@ -244,9 +242,8 @@ void MergeChannelDialog::updateSuggestion()
     }
     else
     {
-        this->suggestionLabel_->setText(
-            QString("Note: Merging '%1' with '%2'")
-                .arg(suggestedDisplay, inputText));
+        this->suggestionLabel_->setText(QString("Note: Merging '%1' with '%2'")
+                                            .arg(suggestedDisplay, inputText));
         this->suggestionLabel_->setStyleSheet(
             "color: #888; font-style: italic;");
     }

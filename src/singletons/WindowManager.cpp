@@ -11,9 +11,9 @@
 #include "providers/kick/KickApi.hpp"
 #include "providers/kick/KickChannel.hpp"
 #include "providers/kick/KickChatServer.hpp"
+#include "providers/twitch/TwitchIrcServer.hpp"
 #include "providers/youtube/YouTubeChannel.hpp"
 #include "providers/youtube/YouTubeChatServer.hpp"
-#include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/Paths.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/Theme.hpp"
@@ -872,8 +872,8 @@ IndirectChannel WindowManager::decodeChannel(const SplitDescriptor &descriptor)
     }
     else if (descriptor.type_ == "youtube")
     {
-        auto youtubeChannel =
-            getApp()->getYouTubeChatServer()->getOrCreate(descriptor.channelName_);
+        auto youtubeChannel = getApp()->getYouTubeChatServer()->getOrCreate(
+            descriptor.channelName_);
         youtubeChannel->connect();
 
         ChannelPtr channel = std::static_pointer_cast<Channel>(youtubeChannel);

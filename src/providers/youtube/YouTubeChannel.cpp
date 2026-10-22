@@ -63,11 +63,10 @@ YouTubeChannel::YouTubeChannel(const QString &target)
         QStringLiteral("^[A-Za-z0-9_-]{11}$")};
     // A bare video id pins us to one broadcast; anything else names a channel
     // we can follow.
-    this->targetIsChannel_ =
-        !videoIdOnly.match(target.trimmed()).hasMatch() &&
-        !target.contains(QStringLiteral("watch?v=")) &&
-        !target.contains(QStringLiteral("youtu.be/")) &&
-        !target.contains(QStringLiteral("/live/"));
+    this->targetIsChannel_ = !videoIdOnly.match(target.trimmed()).hasMatch() &&
+                             !target.contains(QStringLiteral("watch?v=")) &&
+                             !target.contains(QStringLiteral("youtu.be/")) &&
+                             !target.contains(QStringLiteral("/live/"));
 
     this->pollTimer_->setSingleShot(true);
     QObject::connect(this->pollTimer_, &QTimer::timeout, [this] {
@@ -117,8 +116,8 @@ void YouTubeChannel::reconnect()
 void YouTubeChannel::resolveAndOpen()
 {
     this->setConnectionState(YouTubeConnectionState::Resolving);
-    this->addSystemMessage(
-        QStringLiteral("Looking for a live stream on %1...").arg(this->target_));
+    this->addSystemMessage(QStringLiteral("Looking for a live stream on %1...")
+                               .arg(this->target_));
 
     auto self = std::weak_ptr<Channel>(this->shared_from_this());
 
@@ -140,8 +139,8 @@ void YouTubeChannel::resolveAndOpen()
             this->videoId_ = videoId;
 
             this->innerTube_->openSession(
-                videoId, [this, self](YouTubeChatSession session,
-                                      QString sessionError) {
+                videoId,
+                [this, self](YouTubeChatSession session, QString sessionError) {
                     if (self.expired())
                     {
                         return;
@@ -150,7 +149,8 @@ void YouTubeChannel::resolveAndOpen()
                     if (!sessionError.isEmpty())
                     {
                         this->addSystemMessage(sessionError);
-                        this->setConnectionState(YouTubeConnectionState::Failed);
+                        this->setConnectionState(
+                            YouTubeConnectionState::Failed);
                         this->scheduleRediscovery();
                         return;
                     }
@@ -169,8 +169,8 @@ void YouTubeChannel::resolveAndOpen()
 
 void YouTubeChannel::scheduleNextPoll(int timeoutMs)
 {
-    auto clamped = std::clamp(timeoutMs, MIN_POLL_INTERVAL_MS,
-                              MAX_POLL_INTERVAL_MS);
+    auto clamped =
+        std::clamp(timeoutMs, MIN_POLL_INTERVAL_MS, MAX_POLL_INTERVAL_MS);
     this->pollTimer_->start(clamped);
 }
 
@@ -205,8 +205,8 @@ void YouTubeChannel::pollOnce()
             {
                 this->addSystemMessage(
                     this->targetIsChannel_
-                        ? QStringLiteral(
-                              "Live chat ended. Watching for the next stream...")
+                        ? QStringLiteral("Live chat ended. Watching for the "
+                                         "next stream...")
                         : QStringLiteral("Live chat ended."));
                 this->setConnectionState(YouTubeConnectionState::Ended);
                 this->liveStatusChanged.invoke();
@@ -277,11 +277,10 @@ void YouTubeChannel::handleMessage(const YouTubeMessage &message)
         auto tooltip = message.author.memberBadgeTooltip.isEmpty()
                            ? QStringLiteral("Member")
                            : message.author.memberBadgeTooltip;
-        if (auto badge =
-                this->badgeFor(message.author.memberBadgeUrl, tooltip))
+        if (auto badge = this->badgeFor(message.author.memberBadgeUrl, tooltip))
         {
-            builder.emplace<BadgeElement>(badge,
-                                          MessageElementFlag::BadgeSubscription);
+            builder.emplace<BadgeElement>(
+                badge, MessageElementFlag::BadgeSubscription);
         }
     }
 
@@ -303,10 +302,9 @@ void YouTubeChannel::handleMessage(const YouTubeMessage &message)
     }
 
     builder
-        .emplace<TextElement>(message.author.name + ':',
-                              MessageElementFlag::Username,
-                              colorForAuthor(message.author),
-                              FontStyle::ChatMediumBold)
+        .emplace<TextElement>(
+            message.author.name + ':', MessageElementFlag::Username,
+            colorForAuthor(message.author), FontStyle::ChatMediumBold)
         ->setLink({Link::UserInfo, message.author.name});
 
     // Superchats and membership events lead with what happened, since the body
@@ -359,16 +357,14 @@ void YouTubeChannel::appendRuns(MessageBuilder &builder,
                 builder.emplace<EmoteElement>(emote, MessageElementFlag::Emote);
                 continue;
             }
-            builder.emplace<TextElement>(run.emojiLabel,
-                                         MessageElementFlag::Text,
-                                         MessageColor::Text);
+            builder.emplace<TextElement>(
+                run.emojiLabel, MessageElementFlag::Text, MessageColor::Text);
             continue;
         }
 
         // Split into words so third-party global emotes still resolve inside a
         // YouTube message, matching what the Kick channel does.
-        for (const auto &word :
-             run.text.split(' ', Qt::SkipEmptyParts))
+        for (const auto &word : run.text.split(' ', Qt::SkipEmptyParts))
         {
             EmotePtr thirdParty;
             if (auto *seventv = getApp()->getSeventvEmotes())
@@ -477,7 +473,8 @@ void YouTubeChannel::sendMessage(const QString &message)
 
     if (this->videoId_.isEmpty())
     {
-        this->addSystemMessage(QStringLiteral("Not connected to a stream yet."));
+        this->addSystemMessage(
+            QStringLiteral("Not connected to a stream yet."));
         return;
     }
 
@@ -513,7 +510,8 @@ void YouTubeChannel::sendMessage(const QString &message)
             if (liveChatId.isEmpty())
             {
                 this->addSystemMessage(
-                    QStringLiteral("Could not find the live chat to send to: %1")
+                    QStringLiteral(
+                        "Could not find the live chat to send to: %1")
                         .arg(error));
                 return;
             }

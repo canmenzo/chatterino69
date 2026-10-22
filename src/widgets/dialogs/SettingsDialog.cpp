@@ -14,10 +14,8 @@
 #include "widgets/settingspages/AdvancedPage.hpp"
 #include "widgets/settingspages/AppearancePage.hpp"
 #include "widgets/settingspages/ChatPage.hpp"
-#include "widgets/settingspages/EmotesPage.hpp"
-#include "widgets/settingspages/PlatformsPage.hpp"
-#include "widgets/settingspages/StreamerModePage.hpp"
 #include "widgets/settingspages/CommandPage.hpp"
+#include "widgets/settingspages/EmotesPage.hpp"
 #include "widgets/settingspages/ExternalToolsPage.hpp"
 #include "widgets/settingspages/FiltersPage.hpp"
 #include "widgets/settingspages/GeneralPage.hpp"
@@ -27,7 +25,9 @@
 #include "widgets/settingspages/ModerationPage.hpp"
 #include "widgets/settingspages/NicknamesPage.hpp"
 #include "widgets/settingspages/NotificationPage.hpp"
+#include "widgets/settingspages/PlatformsPage.hpp"
 #include "widgets/settingspages/PluginsPage.hpp"
+#include "widgets/settingspages/StreamerModePage.hpp"
 
 #include <QDialogButtonBox>
 #include <QFile>

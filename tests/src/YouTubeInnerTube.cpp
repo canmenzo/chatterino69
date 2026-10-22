@@ -62,7 +62,8 @@ TEST(YouTubeInnerTube, resolvesWatchUrlWithExtraQueryParams)
 
     // A shared link usually carries a timestamp and a tracking parameter.
     auto r = resolveSync(
-        tube, "https://www.youtube.com/watch?v=jfKfPfyJRdk&t=42s&feature=share");
+        tube,
+        "https://www.youtube.com/watch?v=jfKfPfyJRdk&t=42s&feature=share");
     ASSERT_TRUE(r.called);
     EXPECT_EQ(r.videoId, "jfKfPfyJRdk");
 }
@@ -75,7 +76,8 @@ TEST(YouTubeInnerTube, resolvesShortAndLiveUrls)
     ASSERT_TRUE(shortUrl.called);
     EXPECT_EQ(shortUrl.videoId, "jfKfPfyJRdk");
 
-    auto liveUrl = resolveSync(tube, "https://www.youtube.com/live/jfKfPfyJRdk");
+    auto liveUrl =
+        resolveSync(tube, "https://www.youtube.com/live/jfKfPfyJRdk");
     ASSERT_TRUE(liveUrl.called);
     EXPECT_EQ(liveUrl.videoId, "jfKfPfyJRdk");
 }

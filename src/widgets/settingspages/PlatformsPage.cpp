@@ -8,11 +8,11 @@
 #include "controllers/hotkeys/HotkeyController.hpp"
 #include "providers/twitch/api/TwitchGql.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
+#include "providers/twitch/TwitchIrcServer.hpp"
 #include "providers/youtube/YouTubeAccount.hpp"
 #include "providers/youtube/YouTubeApi.hpp"
 #include "providers/youtube/YouTubeChatServer.hpp"
 #include "providers/youtube/YouTubeOAuthFlow.hpp"
-#include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/CrashHandler.hpp"
 #include "singletons/Fonts.hpp"
 #include "singletons/NativeMessaging.hpp"
@@ -42,7 +42,6 @@ using namespace chatterino;
 using namespace chatterino::literals;
 
 }  // namespace
-
 
 namespace chatterino {
 
@@ -213,7 +212,8 @@ void PlatformsPage::initLayout(GeneralPageView &layout)
             "OAuth client.\n"
             "Create a Desktop app client in the Google Cloud console, then "
             "set\n"
-            "CHATTERINO_YOUTUBE_CLIENT_ID and CHATTERINO_YOUTUBE_CLIENT_SECRET.");
+            "CHATTERINO_YOUTUBE_CLIENT_ID and "
+            "CHATTERINO_YOUTUBE_CLIENT_SECRET.");
         youtubeAccountLayout->addWidget(youtubeLoginButton);
 
         auto *youtubeLogoutButton = new QPushButton("Sign out");
@@ -261,9 +261,8 @@ void PlatformsPage::initLayout(GeneralPageView &layout)
         QObject::connect(
             youtubeLoginButton, &QPushButton::clicked,
             [youtubeStatusLabel, updateYouTubeUI] {
-                auto *flow = new YouTubeOAuthFlow(getApp()->getYouTubeChatServer()
-                                                      ->api()
-                                                      .get());
+                auto *flow = new YouTubeOAuthFlow(
+                    getApp()->getYouTubeChatServer()->api().get());
 
                 QObject::connect(
                     flow, &YouTubeOAuthFlow::codeReceived,
@@ -272,8 +271,8 @@ void PlatformsPage::initLayout(GeneralPageView &layout)
                         const QString &codeVerifier) {
                         getApp()->getYouTubeChatServer()->api()->exchangeCode(
                             code, redirectUri, codeVerifier,
-                            [flow, updateYouTubeUI,
-                             youtubeStatusLabel](bool ok, QString error) {
+                            [flow, updateYouTubeUI, youtubeStatusLabel](
+                                bool ok, QString error) {
                                 if (!ok)
                                 {
                                     youtubeStatusLabel->setText(
@@ -290,16 +289,14 @@ void PlatformsPage::initLayout(GeneralPageView &layout)
                             });
                     });
 
-                QObject::connect(flow, &YouTubeOAuthFlow::failed,
-                                 [flow, youtubeStatusLabel](
-                                     const QString &error) {
-                                     youtubeStatusLabel->setText(
-                                         QStringLiteral("Login failed: %1")
-                                             .arg(error));
-                                     youtubeStatusLabel->setStyleSheet(
-                                         "color: #ff4444;");
-                                     flow->deleteLater();
-                                 });
+                QObject::connect(
+                    flow, &YouTubeOAuthFlow::failed,
+                    [flow, youtubeStatusLabel](const QString &error) {
+                        youtubeStatusLabel->setText(
+                            QStringLiteral("Login failed: %1").arg(error));
+                        youtubeStatusLabel->setStyleSheet("color: #ff4444;");
+                        flow->deleteLater();
+                    });
 
                 youtubeStatusLabel->setText(
                     "Waiting for Google in your browser...");

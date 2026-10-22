@@ -286,8 +286,7 @@ float getTooltipScale(EmoteTooltipScale emoteTooltipScale)
 
 /// A merged split is not a channel anything can be done to, so an action on a
 /// message has to run against the platform channel that message came from.
-ChannelPtr channelForMessage(const ChannelPtr &channel,
-                             const Message *message)
+ChannelPtr channelForMessage(const ChannelPtr &channel, const Message *message)
 {
     auto *merged = dynamic_cast<MergedChannel *>(channel.get());
     if (merged == nullptr || message == nullptr)
@@ -295,10 +294,9 @@ ChannelPtr channelForMessage(const ChannelPtr &channel,
         return channel;
     }
 
-    auto source =
-        merged->sourceForPlatform(message->flags.has(MessageFlag::Kick)
-                                      ? Channel::Type::Kick
-                                      : Channel::Type::Twitch);
+    auto source = merged->sourceForPlatform(
+        message->flags.has(MessageFlag::Kick) ? Channel::Type::Kick
+                                              : Channel::Type::Twitch);
     return source ? source : channel;
 }
 
@@ -3014,10 +3012,9 @@ void ChannelView::showUserInfoPopup(const QString &userName,
 
     // a Kick user is not moderated through Twitch, and the open Twitch channel
     // that happens to share the streamer's name is not their channel either
-    auto contextChannel =
-        fromKick ? Channel::getEmpty()
-                 : getApp()->getTwitch()->getChannelOrEmpty(
-                       alternativePopoutChannel);
+    auto contextChannel = fromKick ? Channel::getEmpty()
+                                   : getApp()->getTwitch()->getChannelOrEmpty(
+                                         alternativePopoutChannel);
     auto openingChannel = this->hasSourceChannel() ? this->sourceChannel_
                                                    : this->underlyingChannel_;
 

@@ -61,15 +61,16 @@ bool YouTubeOAuthFlow::start()
     // whatever we actually got.
     if (!this->server_->listen(QHostAddress::LocalHost, 0))
     {
-        Q_EMIT this->failed(
-            QStringLiteral("Could not open a local port for the YouTube login"));
+        Q_EMIT this->failed(QStringLiteral(
+            "Could not open a local port for the YouTube login"));
         this->server_.reset();
         return false;
     }
 
-    this->redirectUri_ = QStringLiteral("http://127.0.0.1:%1")
-                             .arg(this->server_->serverPort());
-    this->state_ = QString::number(QRandomGenerator::system()->generate64(), 16);
+    this->redirectUri_ =
+        QStringLiteral("http://127.0.0.1:%1").arg(this->server_->serverPort());
+    this->state_ =
+        QString::number(QRandomGenerator::system()->generate64(), 16);
 
     QByteArray verifier(32, 0);
     QRandomGenerator::system()->fillRange(
@@ -85,8 +86,7 @@ bool YouTubeOAuthFlow::start()
     QUrlQuery query;
     query.addQueryItem(QStringLiteral("client_id"), YouTubeApi::clientId());
     query.addQueryItem(QStringLiteral("redirect_uri"), this->redirectUri_);
-    query.addQueryItem(QStringLiteral("response_type"),
-                       QStringLiteral("code"));
+    query.addQueryItem(QStringLiteral("response_type"), QStringLiteral("code"));
     query.addQueryItem(QStringLiteral("scope"), SCOPE);
     // offline + consent is what makes Google return a refresh token, without
     // which the login would silently stop working after an hour.
@@ -139,8 +139,8 @@ void YouTubeOAuthFlow::onConnection()
         auto firstLine = request.section(QStringLiteral("\r\n"), 0, 0);
         auto target = firstLine.section(' ', 1, 1);
 
-        QUrlQuery query{QUrl{QStringLiteral("http://127.0.0.1") + target}
-                            .query()};
+        QUrlQuery query{
+            QUrl{QStringLiteral("http://127.0.0.1") + target}.query()};
 
         auto error = query.queryItemValue(QStringLiteral("error"));
         auto state = query.queryItemValue(QStringLiteral("state"));
@@ -185,15 +185,15 @@ void YouTubeOAuthFlow::onConnection()
 void YouTubeOAuthFlow::respond(QTcpSocket *socket, const QString &title,
                                const QString &body)
 {
-    auto html = QStringLiteral(
-                    "<!doctype html><meta charset=\"utf-8\">"
-                    "<title>%1</title>"
-                    "<body style=\"font-family:system-ui;background:#18181b;"
-                    "color:#efeff1;display:grid;place-items:center;"
-                    "height:100vh;margin:0\">"
-                    "<div style=\"text-align:center\"><h2>%1</h2><p>%2</p>"
-                    "</div></body>")
-                    .arg(title, body);
+    auto html =
+        QStringLiteral("<!doctype html><meta charset=\"utf-8\">"
+                       "<title>%1</title>"
+                       "<body style=\"font-family:system-ui;background:#18181b;"
+                       "color:#efeff1;display:grid;place-items:center;"
+                       "height:100vh;margin:0\">"
+                       "<div style=\"text-align:center\"><h2>%1</h2><p>%2</p>"
+                       "</div></body>")
+            .arg(title, body);
 
     auto payload = html.toUtf8();
     QByteArray response = "HTTP/1.1 200 OK\r\n"

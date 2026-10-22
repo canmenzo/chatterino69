@@ -153,7 +153,8 @@ const QString &Version::runningString() const
 void Version::generateBuildString()
 {
     // e.g. Chatterino 69 or Chatterino 69 Nightly, plus the chatterino7 base version
-    auto s = this->fullVersion() + " (based on chatterino7 " + this->version_ + ")";
+    auto s =
+        this->fullVersion() + " (based on chatterino7 " + this->version_ + ")";
 
     // Add commit information
     s +=

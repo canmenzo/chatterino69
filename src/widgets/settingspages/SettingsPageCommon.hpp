@@ -20,9 +20,9 @@ inline const QStringList ZOOM_LEVELS = {
     "1.6x", "1.8x", "2x",   "2.33x", "2.66x", "3x",      "3.5x", "4x",
 };
 
-inline void addKeyboardModifierSetting(GeneralPageView &layout,
-                                       const QString &title,
-                                       EnumSetting<Qt::KeyboardModifier> &setting)
+inline void addKeyboardModifierSetting(
+    GeneralPageView &layout, const QString &title,
+    EnumSetting<Qt::KeyboardModifier> &setting)
 {
     layout.addDropdown<std::underlying_type_t<Qt::KeyboardModifier>>(
         title, {"None", "Shift", "Control", "Alt", META_KEY}, setting,

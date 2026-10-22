@@ -26,8 +26,7 @@ TEST(MergedChannel, carriesThreePlatformsAtOnce)
     EXPECT_TRUE(merged.hasPlatform(Channel::Type::Twitch));
     EXPECT_TRUE(merged.hasPlatform(Channel::Type::Kick));
     EXPECT_TRUE(merged.hasPlatform(Channel::Type::YouTube));
-    EXPECT_EQ(merged.getDisplayName(),
-              "T:menzocs + K:menzocs + Y:@menzocs");
+    EXPECT_EQ(merged.getDisplayName(), "T:menzocs + K:menzocs + Y:@menzocs");
 }
 
 TEST(MergedChannel, acceptsAThirdPlatformAfterTheFact)
@@ -46,8 +45,7 @@ TEST(MergedChannel, acceptsAThirdPlatformAfterTheFact)
     EXPECT_EQ(merged.getSourceChannels().size(), 3u);
     EXPECT_TRUE(merged.hasPlatform(Channel::Type::YouTube));
     // The display name is recomputed on read, so it picks the new source up.
-    EXPECT_EQ(merged.getDisplayName(),
-              "T:menzocs + K:menzocs + Y:@menzocs");
+    EXPECT_EQ(merged.getDisplayName(), "T:menzocs + K:menzocs + Y:@menzocs");
 }
 
 TEST(MergedChannel, doesNotAddTheSameChannelTwice)

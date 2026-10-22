@@ -37,7 +37,6 @@ using namespace chatterino::literals;
 
 }  // namespace
 
-
 namespace chatterino {
 
 StreamerModePage::StreamerModePage()

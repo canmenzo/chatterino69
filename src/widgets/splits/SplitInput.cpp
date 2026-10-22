@@ -224,12 +224,12 @@ void SplitInput::initLayout()
     auto bindPlatformButton = [this](QPushButton *button,
                                      PlatformSelection selection) {
         QObject::connect(button, &QPushButton::clicked, [this, selection]() {
-            this->ui_.platformBothBtn->setChecked(
-                selection == PlatformSelection::Both);
+            this->ui_.platformBothBtn->setChecked(selection ==
+                                                  PlatformSelection::Both);
             this->ui_.platformTwitchBtn->setChecked(
                 selection == PlatformSelection::TwitchOnly);
-            this->ui_.platformKickBtn->setChecked(
-                selection == PlatformSelection::KickOnly);
+            this->ui_.platformKickBtn->setChecked(selection ==
+                                                  PlatformSelection::KickOnly);
             this->ui_.platformYouTubeBtn->setChecked(
                 selection == PlatformSelection::YouTubeOnly);
 

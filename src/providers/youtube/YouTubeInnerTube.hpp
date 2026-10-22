@@ -87,9 +87,8 @@ public:
                         std::function<void(QString videoId, QString error)> cb);
 
     /// Loads the live_chat page for @a videoId and extracts a session.
-    void openSession(
-        const QString &videoId,
-        std::function<void(YouTubeChatSession, QString error)> cb);
+    void openSession(const QString &videoId,
+                     std::function<void(YouTubeChatSession, QString error)> cb);
 
     /// Performs one long-poll. @a session supplies the continuation; the reply
     /// carries the next one.

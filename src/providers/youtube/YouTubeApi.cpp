@@ -16,16 +16,14 @@ namespace {
 
 using namespace chatterino;
 
-const QString API_BASE = QStringLiteral("https://www.googleapis.com/youtube/v3");
+const QString API_BASE =
+    QStringLiteral("https://www.googleapis.com/youtube/v3");
 const QString TOKEN_URL = QStringLiteral("https://oauth2.googleapis.com/token");
 
 QString errorFromReply(QNetworkReply *reply, const QByteArray &body)
 {
     auto obj = QJsonDocument::fromJson(body).object();
-    auto message = obj.value("error")
-                       .toObject()
-                       .value("message")
-                       .toString();
+    auto message = obj.value("error").toObject().value("message").toString();
     if (!message.isEmpty())
     {
         return message;
@@ -71,9 +69,8 @@ bool YouTubeApi::hasClientCredentials()
     return !clientId().isEmpty() && !clientSecret().isEmpty();
 }
 
-void YouTubeApi::withFreshToken(
-    std::function<void(bool, QString)> onFailure,
-    std::function<void(QString)> work)
+void YouTubeApi::withFreshToken(std::function<void(bool, QString)> onFailure,
+                                std::function<void(QString)> work)
 {
     if (!this->account_ || !this->account_->isAuthenticated())
     {
@@ -107,8 +104,8 @@ void YouTubeApi::refreshToken(std::function<void(bool, QString)> cb)
 
     if (!hasClientCredentials())
     {
-        cb(false,
-           QStringLiteral("CHATTERINO_YOUTUBE_CLIENT_ID / _SECRET are not set"));
+        cb(false, QStringLiteral(
+                      "CHATTERINO_YOUTUBE_CLIENT_ID / _SECRET are not set"));
         return;
     }
 
@@ -157,8 +154,8 @@ void YouTubeApi::exchangeCode(const QString &code, const QString &redirectUri,
 
     if (!hasClientCredentials())
     {
-        cb(false,
-           QStringLiteral("CHATTERINO_YOUTUBE_CLIENT_ID / _SECRET are not set"));
+        cb(false, QStringLiteral(
+                      "CHATTERINO_YOUTUBE_CLIENT_ID / _SECRET are not set"));
         return;
     }
 
@@ -205,35 +202,33 @@ void YouTubeApi::exchangeCode(const QString &code, const QString &redirectUri,
                         "Bearer " + this->account_->getAccessToken().toUtf8());
 
         auto *meReply = this->network_->get(me);
-        QObject::connect(meReply, &QNetworkReply::finished, this,
-                         [this, meReply, cb] {
-                             meReply->deleteLater();
-                             if (meReply->error() == QNetworkReply::NoError)
-                             {
-                                 auto items =
-                                     QJsonDocument::fromJson(meReply->readAll())
-                                         .object()
-                                         .value("items")
-                                         .toArray();
-                                 if (!items.isEmpty())
-                                 {
-                                     auto item = items.first().toObject();
-                                     this->account_->setIdentity(
-                                         item.value("id").toString(),
-                                         item.value("snippet")
-                                             .toObject()
-                                             .value("title")
-                                             .toString());
-                                 }
-                             }
-                             // Identity is cosmetic: the grant itself worked.
-                             cb(true, {});
-                         });
+        QObject::connect(
+            meReply, &QNetworkReply::finished, this, [this, meReply, cb] {
+                meReply->deleteLater();
+                if (meReply->error() == QNetworkReply::NoError)
+                {
+                    auto items = QJsonDocument::fromJson(meReply->readAll())
+                                     .object()
+                                     .value("items")
+                                     .toArray();
+                    if (!items.isEmpty())
+                    {
+                        auto item = items.first().toObject();
+                        this->account_->setIdentity(item.value("id").toString(),
+                                                    item.value("snippet")
+                                                        .toObject()
+                                                        .value("title")
+                                                        .toString());
+                    }
+                }
+                // Identity is cosmetic: the grant itself worked.
+                cb(true, {});
+            });
     });
 }
 
-void YouTubeApi::resolveLiveChatId(
-    const QString &videoId, std::function<void(QString, QString)> cb)
+void YouTubeApi::resolveLiveChatId(const QString &videoId,
+                                   std::function<void(QString, QString)> cb)
 {
     this->withFreshToken(
         [cb](bool, QString error) {
@@ -251,43 +246,39 @@ void YouTubeApi::resolveLiveChatId(
             req.setRawHeader("Authorization", "Bearer " + token.toUtf8());
 
             auto *reply = this->network_->get(req);
-            QObject::connect(reply, &QNetworkReply::finished, this,
-                             [reply, cb] {
-                                 reply->deleteLater();
-                                 auto body = reply->readAll();
+            QObject::connect(
+                reply, &QNetworkReply::finished, this, [reply, cb] {
+                    reply->deleteLater();
+                    auto body = reply->readAll();
 
-                                 if (reply->error() != QNetworkReply::NoError)
-                                 {
-                                     cb({}, errorFromReply(reply, body));
-                                     return;
-                                 }
+                    if (reply->error() != QNetworkReply::NoError)
+                    {
+                        cb({}, errorFromReply(reply, body));
+                        return;
+                    }
 
-                                 auto items =
-                                     QJsonDocument::fromJson(body)
-                                         .object()
-                                         .value("items")
-                                         .toArray();
-                                 if (items.isEmpty())
-                                 {
-                                     cb({}, QStringLiteral(
-                                                "YouTube did not return that "
-                                                "video"));
-                                     return;
-                                 }
+                    auto items = QJsonDocument::fromJson(body)
+                                     .object()
+                                     .value("items")
+                                     .toArray();
+                    if (items.isEmpty())
+                    {
+                        cb({}, QStringLiteral("YouTube did not return that "
+                                              "video"));
+                        return;
+                    }
 
-                                 auto id = items.first()
-                                               .toObject()
-                                               .value("liveStreamingDetails")
-                                               .toObject()
-                                               .value("activeLiveChatId")
-                                               .toString();
-                                 cb(id,
-                                    id.isEmpty()
-                                        ? QStringLiteral(
+                    auto id = items.first()
+                                  .toObject()
+                                  .value("liveStreamingDetails")
+                                  .toObject()
+                                  .value("activeLiveChatId")
+                                  .toString();
+                    cb(id, id.isEmpty() ? QStringLiteral(
                                               "That stream has no active live "
                                               "chat")
                                         : QString{});
-                             });
+                });
         });
 }
 
@@ -305,8 +296,7 @@ void YouTubeApi::sendMessage(const QString &liveChatId, const QString &text,
              QJsonObject{
                  {"liveChatId", liveChatId},
                  {"type", "textMessageEvent"},
-                 {"textMessageDetails",
-                  QJsonObject{{"messageText", text}}},
+                 {"textMessageDetails", QJsonObject{{"messageText", text}}},
              }},
         };
 
