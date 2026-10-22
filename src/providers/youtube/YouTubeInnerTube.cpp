@@ -149,7 +149,13 @@ QString largestThumbnail(const QJsonObject &holder)
     {
         return {};
     }
-    return thumbs.last().toObject().value("url").toString();
+    auto url = thumbs.last().toObject().value("url").toString();
+    if (url.startsWith(QStringLiteral("//")))
+    {
+        url.prepend(QStringLiteral("https:"));
+    }
+    // Only fetch images over https; anything else (file:, http:) is dropped.
+    return url.startsWith(QStringLiteral("https://")) ? url : QString{};
 }
 
 /// YouTube stores colours as an unsigned 32-bit ARGB integer.
