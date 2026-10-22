@@ -3,10 +3,12 @@
 #include "common/QLogging.hpp"
 #include "providers/youtube/YouTubeApi.hpp"
 
+#include <QCryptographicHash>
 #include <QDesktopServices>
 #include <QRandomGenerator>
 #include <QTcpServer>
 #include <QTcpSocket>
+#include <QTimer>
 #include <QUrl>
 #include <QUrlQuery>
 
@@ -19,6 +21,9 @@ const QString AUTH_URL =
 /// narrower one that permits liveChatMessages.insert.
 const QString SCOPE =
     QStringLiteral("https://www.googleapis.com/auth/youtube.force-ssl");
+
+/// How long the loopback port stays open waiting for the browser.
+constexpr int AUTH_TIMEOUT_MS = 5 * 60 * 1000;
 
 }  // namespace
 
@@ -64,7 +69,17 @@ bool YouTubeOAuthFlow::start()
 
     this->redirectUri_ = QStringLiteral("http://127.0.0.1:%1")
                              .arg(this->server_->serverPort());
-    this->state_ = QString::number(QRandomGenerator::global()->generate64(), 16);
+    this->state_ = QString::number(QRandomGenerator::system()->generate64(), 16);
+
+    QByteArray verifier(32, 0);
+    QRandomGenerator::system()->fillRange(
+        reinterpret_cast<quint32 *>(verifier.data()), 8);
+    this->codeVerifier_ = QString::fromLatin1(verifier.toBase64(
+        QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals));
+    auto challenge = QCryptographicHash::hash(this->codeVerifier_.toLatin1(),
+                                              QCryptographicHash::Sha256)
+                         .toBase64(QByteArray::Base64UrlEncoding |
+                                   QByteArray::OmitTrailingEquals);
 
     QUrl url{AUTH_URL};
     QUrlQuery query;
@@ -79,10 +94,23 @@ bool YouTubeOAuthFlow::start()
                        QStringLiteral("offline"));
     query.addQueryItem(QStringLiteral("prompt"), QStringLiteral("consent"));
     query.addQueryItem(QStringLiteral("state"), this->state_);
+    query.addQueryItem(QStringLiteral("code_challenge"),
+                       QString::fromLatin1(challenge));
+    query.addQueryItem(QStringLiteral("code_challenge_method"),
+                       QStringLiteral("S256"));
     url.setQuery(query);
 
     qCDebug(chatterinoYouTube)
         << "YouTube OAuth listening on" << this->redirectUri_;
+
+    QTimer::singleShot(AUTH_TIMEOUT_MS, this, [this] {
+        if (this->server_)
+        {
+            this->cancel();
+            Q_EMIT this->failed(
+                QStringLiteral("Timed out waiting for Google in the browser"));
+        }
+    });
 
     QDesktopServices::openUrl(url);
     return true;
@@ -115,43 +143,39 @@ void YouTubeOAuthFlow::onConnection()
                             .query()};
 
         auto error = query.queryItemValue(QStringLiteral("error"));
-        if (!error.isEmpty())
-        {
-            this->respond(socket, QStringLiteral("Login cancelled"),
-                          QStringLiteral("You can close this tab."));
-            Q_EMIT this->failed(error);
-            this->cancel();
-            return;
-        }
-
         auto state = query.queryItemValue(QStringLiteral("state"));
         auto code = query.queryItemValue(QStringLiteral("code"));
 
-        if (code.isEmpty())
+        // Browsers also request /favicon.ico on this port, and any web page
+        // can reach a loopback port, so ignore everything that is not a
+        // callback carrying this flow's state rather than failing the flow.
+        if ((code.isEmpty() && error.isEmpty()) || state != this->state_)
         {
-            // Browsers also request /favicon.ico on this port; ignore anything
-            // that is not the callback rather than failing the flow.
             socket->close();
             socket->deleteLater();
             return;
         }
 
-        if (state != this->state_)
-        {
-            this->respond(socket, QStringLiteral("Login failed"),
-                          QStringLiteral("The login response did not match "
-                                         "this request."));
-            Q_EMIT this->failed(
-                QStringLiteral("OAuth state mismatch, login rejected"));
+        // The socket is a child of server_, so tearing the server down inside
+        // the socket's own readyRead would delete it mid-signal.
+        this->server_->close();
+        QTimer::singleShot(0, this, [this] {
             this->cancel();
+        });
+
+        if (!error.isEmpty())
+        {
+            this->respond(socket, QStringLiteral("Login cancelled"),
+                          QStringLiteral("You can close this tab."));
+            Q_EMIT this->failed(error);
             return;
         }
 
         this->respond(socket, QStringLiteral("Signed in to YouTube"),
                       QStringLiteral("You can close this tab and go back to "
                                      "Chatterino."));
-        Q_EMIT this->codeReceived(code, this->redirectUri_);
-        this->cancel();
+        Q_EMIT this->codeReceived(code, this->redirectUri_,
+                                  this->codeVerifier_);
     });
 
     QObject::connect(socket, &QTcpSocket::disconnected, socket,

@@ -262,9 +262,10 @@ void PlatformsPage::initLayout(GeneralPageView &layout)
                 QObject::connect(
                     flow, &YouTubeOAuthFlow::codeReceived,
                     [flow, updateYouTubeUI, youtubeStatusLabel](
-                        const QString &code, const QString &redirectUri) {
+                        const QString &code, const QString &redirectUri,
+                        const QString &codeVerifier) {
                         getApp()->getYouTubeChatServer()->api()->exchangeCode(
-                            code, redirectUri,
+                            code, redirectUri, codeVerifier,
                             [flow, updateYouTubeUI,
                              youtubeStatusLabel](bool ok, QString error) {
                                 if (!ok)

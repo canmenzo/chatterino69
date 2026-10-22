@@ -44,6 +44,7 @@ public:
     /// Exchanges an authorization code for tokens, then fills in the account's
     /// channel identity.
     void exchangeCode(const QString &code, const QString &redirectUri,
+                      const QString &codeVerifier,
                       std::function<void(bool ok, QString error)> cb);
 
     /// Uses the stored refresh token to mint a new access token.

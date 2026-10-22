@@ -100,7 +100,7 @@ void KickOAuthFlow::generatePKCE()
 
     for (int i = 0; i < verifierLength; ++i)
     {
-        int index = QRandomGenerator::global()->bounded(charset.length());
+        int index = QRandomGenerator::system()->bounded(charset.length());
         this->codeVerifier_.append(charset[index]);
     }
 
@@ -112,7 +112,7 @@ void KickOAuthFlow::generatePKCE()
 
     // Generate random state for CSRF protection
     QByteArray stateBytes(32, 0);
-    QRandomGenerator::global()->fillRange(
+    QRandomGenerator::system()->fillRange(
         reinterpret_cast<quint32 *>(stateBytes.data()), 8);
     this->state_ = stateBytes.toBase64(QByteArray::Base64UrlEncoding |
                                        QByteArray::OmitTrailingEquals);
@@ -211,7 +211,7 @@ void KickOAuthFlow::stopLocalServer()
 
 bool KickOAuthFlow::openBrowser(const QString &url)
 {
-    qCDebug(chatterinoKick) << "Opening browser for OAuth:" << url;
+    qCDebug(chatterinoKick) << "Opening browser for OAuth";
 
     bool opened = QDesktopServices::openUrl(QUrl(url));
 
@@ -275,6 +275,9 @@ void KickOAuthFlow::onClientReadyRead()
     this->sendResponse(socket, 200,
                        "Authentication successful! You can close this window.");
 
+    // Accept a single callback; close() keeps the socket alive, unlike reset()
+    this->localServer_->close();
+
     // Exchange code for tokens
     this->exchangeCodeForTokens(*code);
 }
@@ -313,14 +316,10 @@ std::optional<QString> KickOAuthFlow::parseCallbackCode(
 
     // Verify state to prevent CSRF (URL-decode both sides for comparison)
     QString state = query.queryItemValue("state", QUrl::FullyDecoded);
-    qCDebug(chatterinoKick) << "Received state:" << state;
-    qCDebug(chatterinoKick) << "Expected state:" << this->state_;
 
     if (state != this->state_)
     {
-        qCWarning(chatterinoKick)
-            << "State mismatch in OAuth callback"
-            << "received:" << state << "expected:" << this->state_;
+        qCWarning(chatterinoKick) << "State mismatch in OAuth callback";
         return std::nullopt;
     }
 

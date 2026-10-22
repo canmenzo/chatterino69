@@ -36,7 +36,8 @@ public:
 
 Q_SIGNALS:
     /// The user approved and Google handed back an authorization code.
-    void codeReceived(const QString &code, const QString &redirectUri);
+    void codeReceived(const QString &code, const QString &redirectUri,
+                      const QString &codeVerifier);
     /// The flow failed or the user denied consent.
     void failed(const QString &error);
 
@@ -48,6 +49,7 @@ private:
     std::unique_ptr<QTcpServer> server_;
     QString redirectUri_;
     QString state_;
+    QString codeVerifier_;
 };
 
 }  // namespace chatterino

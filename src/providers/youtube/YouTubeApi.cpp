@@ -146,6 +146,7 @@ void YouTubeApi::refreshToken(std::function<void(bool, QString)> cb)
 }
 
 void YouTubeApi::exchangeCode(const QString &code, const QString &redirectUri,
+                              const QString &codeVerifier,
                               std::function<void(bool, QString)> cb)
 {
     if (!this->account_)
@@ -166,6 +167,7 @@ void YouTubeApi::exchangeCode(const QString &code, const QString &redirectUri,
     form.addQueryItem(QStringLiteral("client_id"), clientId());
     form.addQueryItem(QStringLiteral("client_secret"), clientSecret());
     form.addQueryItem(QStringLiteral("redirect_uri"), redirectUri);
+    form.addQueryItem(QStringLiteral("code_verifier"), codeVerifier);
     form.addQueryItem(QStringLiteral("grant_type"),
                       QStringLiteral("authorization_code"));
 
