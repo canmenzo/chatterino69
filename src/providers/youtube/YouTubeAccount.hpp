@@ -3,6 +3,8 @@
 #include <QDateTime>
 #include <QString>
 
+#include <memory>
+
 namespace chatterino {
 
 /// The Google account used to *send* YouTube messages.
@@ -10,7 +12,7 @@ namespace chatterino {
 /// Reading live chat is anonymous, so this is only ever needed once the user
 /// wants to talk. Tokens come from the official OAuth flow and are refreshed
 /// against Google's token endpoint.
-class YouTubeAccount
+class YouTubeAccount : public std::enable_shared_from_this<YouTubeAccount>
 {
 public:
     YouTubeAccount() = default;
@@ -29,8 +31,9 @@ public:
     void setIdentity(const QString &channelId, const QString &displayName);
     void clear();
 
-    /// Persists to and loads from the settings store. The refresh token is the
-    /// only long-lived secret here.
+    /// Persists to and loads from the settings store, with the tokens in the
+    /// system keychain. Must be called on a shared_ptr: the tokens load
+    /// asynchronously.
     void save() const;
     void load();
 

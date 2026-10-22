@@ -99,22 +99,24 @@ void KickAccountManager::logout()
 
 void KickAccountManager::load()
 {
-    auto account = KickAccount::loadFromSettings();
-    if (account)
-    {
-        this->setCurrentUser(account);
-        this->accounts.append(account);
-    }
+    KickAccount::loadFromSettings([this](std::shared_ptr<KickAccount> account) {
+        if (account)
+        {
+            this->setCurrentUser(account);
+            this->accounts.append(account);
+        }
+    });
 }
 
 void KickAccountManager::reloadUsers()
 {
     // Reload account from settings
-    auto account = KickAccount::loadFromSettings();
-    if (account)
-    {
-        this->setCurrentUser(account);
-    }
+    KickAccount::loadFromSettings([this](std::shared_ptr<KickAccount> account) {
+        if (account)
+        {
+            this->setCurrentUser(account);
+        }
+    });
 }
 
 void KickAccountManager::setCurrentUser(std::shared_ptr<KickAccount> account)

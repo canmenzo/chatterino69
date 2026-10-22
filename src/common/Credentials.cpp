@@ -261,11 +261,10 @@ void Credentials::erase(const QString &provider, const QString &name_)
     {
         auto &instance = insecureInstance();
 
-        if (auto it = instance.object().find(name);
-            it != instance.object().end())
-        {
-            instance.object().erase(it);
-        }
+        // object() returns a copy, so erasing from it directly was a no-op
+        auto obj = instance.object();
+        obj.remove(name);
+        instance.setObject(obj);
 
         queueInsecureSave();
     }

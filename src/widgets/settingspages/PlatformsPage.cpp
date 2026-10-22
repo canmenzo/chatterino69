@@ -6,6 +6,7 @@
 #include "controllers/accounts/AccountController.hpp"
 #include "controllers/hotkeys/HotkeyCategory.hpp"
 #include "controllers/hotkeys/HotkeyController.hpp"
+#include "providers/twitch/api/TwitchGql.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
 #include "providers/youtube/YouTubeAccount.hpp"
 #include "providers/youtube/YouTubeApi.hpp"
@@ -32,6 +33,7 @@
 #include <QFontDialog>
 #include <QFormLayout>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMessageBox>
 
 namespace {
@@ -71,9 +73,13 @@ void PlatformsPage::initLayout(GeneralPageView &layout)
         auto *gqlForm = new QFormLayout();
         layout.addLayout(gqlForm);
 
-        SettingWidget::lineEdit("Twitch token", s.twitchGqlToken,
-                                "auth-token cookie value")
-            ->addTo(layout, gqlForm);
+        auto *gqlTokenEdit = new QLineEdit(gql::token());
+        gqlTokenEdit->setPlaceholderText("auth-token cookie value");
+        QObject::connect(gqlTokenEdit, &QLineEdit::textChanged,
+                         [](const QString &value) {
+                             gql::saveToken(value);
+                         });
+        gqlForm->addRow("Twitch token:", gqlTokenEdit);
     }
 
     layout.addTitle("Kick Integration");

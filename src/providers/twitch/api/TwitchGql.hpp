@@ -26,6 +26,16 @@ namespace gql {
 /// True when the user has switched this on and given us a token.
 bool isEnabled();
 
+/// Reads the saved token from the keychain, first moving one that older builds
+/// left in plaintext settings.json.
+void loadToken();
+
+/// Replaces the token in memory only.
+void setToken(const QString &value);
+
+/// Replaces the token and saves it to the keychain.
+void saveToken(const QString &value);
+
 /// The user's token, stripped of any "OAuth "/"Authorization:" prefix.
 QString token();
 

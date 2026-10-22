@@ -1,9 +1,11 @@
 #include "providers/twitch/api/TwitchGql.hpp"
 
+#include "common/Credentials.hpp"
 #include "common/network/NetworkRequest.hpp"
 #include "common/network/NetworkResult.hpp"
 #include "singletons/Settings.hpp"
 
+#include <QCoreApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QUuid>
@@ -22,6 +24,12 @@ constexpr const char *TV_ORIGIN = "https://android.tv.twitch.tv";
 constexpr const char *TV_USER_AGENT =
     "Mozilla/5.0 (Linux; Android 7.1; Smart Box C1) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36";
+
+QString &storedToken()
+{
+    static QString token;
+    return token;
+}
 
 /// Twitch expects a stable per-install id on these requests.
 QString deviceId()
@@ -112,9 +120,41 @@ void run(const QJsonObject &payload, gql::SuccessCallback onSuccess,
 
 namespace chatterino::gql {
 
+void loadToken()
+{
+    // Older builds kept the token in plaintext settings.json
+    auto legacy = getSettings()->twitchGqlToken.getValue();
+    if (!legacy.isEmpty())
+    {
+        saveToken(legacy);
+        getSettings()->twitchGqlToken.setValue("");
+        return;
+    }
+
+    Credentials::instance().get("twitch", "gqlToken",
+                                QCoreApplication::instance(),
+                                [](const QString &saved) {
+                                    if (storedToken().isEmpty())
+                                    {
+                                        setToken(saved);
+                                    }
+                                });
+}
+
+void setToken(const QString &value)
+{
+    storedToken() = value;
+}
+
+void saveToken(const QString &value)
+{
+    setToken(value);
+    Credentials::instance().set("twitch", "gqlToken", value);
+}
+
 QString token()
 {
-    auto raw = getSettings()->twitchGqlToken.getValue().trimmed();
+    auto raw = storedToken().trimmed();
 
     if (raw.startsWith("Authorization:", Qt::CaseInsensitive))
     {

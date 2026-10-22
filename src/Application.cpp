@@ -44,6 +44,7 @@
 #include "providers/seventv/SeventvEventAPI.hpp"
 #include "providers/seventv/SeventvPaints.hpp"
 #include "providers/seventv/SeventvPersonalEmotes.hpp"
+#include "providers/twitch/api/TwitchGql.hpp"
 #include "providers/twitch/ChannelPointReward.hpp"
 #include "providers/twitch/PubSubManager.hpp"
 #include "providers/twitch/PubSubMessages.hpp"
@@ -288,6 +289,9 @@ void Application::initialize(Settings &settings, const Paths &paths)
     this->emotes->initialize();
 
     this->accounts->load();
+    gql::loadToken();
+    // Starts the keychain read now so the tokens are there before anything asks
+    std::ignore = this->youtubeChatServer->account();
 
     this->windows->initialize();
 

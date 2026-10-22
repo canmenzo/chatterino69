@@ -7,6 +7,7 @@
 #include <QDateTime>
 #include <QString>
 
+#include <functional>
 #include <memory>
 #include <optional>
 
@@ -47,9 +48,10 @@ public:
     /// Save account credentials to settings
     void saveToSettings();
 
-    /// Load account from settings
-    /// @return loaded account or nullptr if not found
-    static std::shared_ptr<KickAccount> loadFromSettings();
+    /// Load account from settings. The tokens come from the keychain, so the
+    /// result arrives asynchronously; nullptr if no account is saved.
+    static void loadFromSettings(
+        std::function<void(std::shared_ptr<KickAccount>)> onLoaded);
 
     /// Clear saved credentials from settings
     static void clearSavedCredentials();

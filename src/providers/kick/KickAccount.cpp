@@ -1,10 +1,12 @@
 #include "providers/kick/KickAccount.hpp"
 
+#include "common/Credentials.hpp"
 #include "common/Env.hpp"
 #include "common/ProviderId.hpp"
 #include "common/QLogging.hpp"
 #include "singletons/Settings.hpp"
 
+#include <QCoreApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkAccessManager>
@@ -16,9 +18,11 @@
 namespace chatterino {
 
 namespace {
-// Settings keys for storing Kick account credentials
+// Older builds kept the tokens in plaintext QSettings under these keys; they
+// now live in the system keychain and these are only read to migrate.
 const QString SETTINGS_KEY_ACCESS_TOKEN = "kick/accessToken";
 const QString SETTINGS_KEY_REFRESH_TOKEN = "kick/refreshToken";
+const QString CREDENTIALS_PROVIDER = "kick";
 const QString SETTINGS_KEY_EXPIRES_AT = "kick/expiresAt";
 const QString SETTINGS_KEY_USERNAME = "kick/username";
 const QString SETTINGS_KEY_USER_ID = "kick/userId";
@@ -232,39 +236,79 @@ void KickAccount::saveToSettings()
 
     settings.setValue(SETTINGS_KEY_USERNAME,
                       this->username_);  // Save username!
-    settings.setValue(SETTINGS_KEY_ACCESS_TOKEN, this->accessToken_);
-    settings.setValue(SETTINGS_KEY_REFRESH_TOKEN, this->refreshToken_);
     settings.setValue(SETTINGS_KEY_EXPIRES_AT,
                       this->expiresAt_.toString(Qt::ISODate));
     settings.setValue(SETTINGS_KEY_USER_ID, this->userId_);
 
+    Credentials::instance().set(CREDENTIALS_PROVIDER, "accessToken",
+                                this->accessToken_);
+    Credentials::instance().set(CREDENTIALS_PROVIDER, "refreshToken",
+                                this->refreshToken_);
+
     qCDebug(chatterinoKick) << "Kick account saved:" << this->username_;
 }
 
-std::shared_ptr<KickAccount> KickAccount::loadFromSettings()
+void KickAccount::loadFromSettings(
+    std::function<void(std::shared_ptr<KickAccount>)> onLoaded)
 {
     QSettings settings;
 
-    QString accessToken = settings.value(SETTINGS_KEY_ACCESS_TOKEN).toString();
-    QString refreshToken =
-        settings.value(SETTINGS_KEY_REFRESH_TOKEN).toString();
     QString expiresAtStr = settings.value(SETTINGS_KEY_EXPIRES_AT).toString();
     QString username = settings.value(SETTINGS_KEY_USERNAME).toString();
-
-    if (accessToken.isEmpty())
-    {
-        qCDebug(chatterinoKick) << "No saved Kick account found";
-        return nullptr;
-    }
-
+    int userId = settings.value(SETTINGS_KEY_USER_ID).toInt();
     QDateTime expiresAt = QDateTime::fromString(expiresAtStr, Qt::ISODate);
 
-    auto account = std::make_shared<KickAccount>(username, accessToken,
-                                                 refreshToken, expiresAt);
-    account->userId_ = settings.value(SETTINGS_KEY_USER_ID).toInt();
+    auto makeAccount =
+        [username, expiresAt, userId](
+            const QString &accessToken,
+            const QString &refreshToken) -> std::shared_ptr<KickAccount> {
+        if (accessToken.isEmpty())
+        {
+            qCDebug(chatterinoKick) << "No saved Kick account found";
+            return nullptr;
+        }
+        auto account = std::make_shared<KickAccount>(username, accessToken,
+                                                     refreshToken, expiresAt);
+        account->userId_ = userId;
+        qCDebug(chatterinoKick) << "Loaded Kick account from settings";
+        return account;
+    };
 
-    qCDebug(chatterinoKick) << "Loaded Kick account from settings";
-    return account;
+    if (settings.contains(SETTINGS_KEY_ACCESS_TOKEN))
+    {
+        auto account =
+            makeAccount(settings.value(SETTINGS_KEY_ACCESS_TOKEN).toString(),
+                        settings.value(SETTINGS_KEY_REFRESH_TOKEN).toString());
+        settings.remove(SETTINGS_KEY_ACCESS_TOKEN);
+        settings.remove(SETTINGS_KEY_REFRESH_TOKEN);
+        if (account)
+        {
+            account->saveToSettings();
+            qCDebug(chatterinoKick)
+                << "Moved Kick tokens from settings to the keychain";
+        }
+        onLoaded(account);
+        return;
+    }
+
+    if (username.isEmpty())
+    {
+        qCDebug(chatterinoKick) << "No saved Kick account found";
+        onLoaded(nullptr);
+        return;
+    }
+
+    Credentials::instance().get(
+        CREDENTIALS_PROVIDER, "accessToken", QCoreApplication::instance(),
+        [makeAccount, onLoaded](const QString &accessToken) {
+            Credentials::instance().get(
+                CREDENTIALS_PROVIDER, "refreshToken",
+                QCoreApplication::instance(),
+                [makeAccount, onLoaded,
+                 accessToken](const QString &refreshToken) {
+                    onLoaded(makeAccount(accessToken, refreshToken));
+                });
+        });
 }
 
 void KickAccount::clearSavedCredentials()
@@ -275,6 +319,9 @@ void KickAccount::clearSavedCredentials()
     settings.remove(SETTINGS_KEY_EXPIRES_AT);
     settings.remove(SETTINGS_KEY_USERNAME);
     settings.remove(SETTINGS_KEY_USER_ID);
+
+    Credentials::instance().erase(CREDENTIALS_PROVIDER, "accessToken");
+    Credentials::instance().erase(CREDENTIALS_PROVIDER, "refreshToken");
 
     qCDebug(chatterinoKick) << "Kick account credentials cleared";
 }

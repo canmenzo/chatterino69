@@ -671,6 +671,7 @@ public:
     /// alongside a token, which their Developer Agreement does not allow, so
     /// nothing here runs unless the user turns it on and supplies a token.
     BoolSetting enableTwitchGql = {"/twitchGql/enabled", false};
+    /// Only read to move older builds' plaintext token into the keychain.
     QStringSetting twitchGqlToken = {"/twitchGql/token", ""};
 
     /// External tools
