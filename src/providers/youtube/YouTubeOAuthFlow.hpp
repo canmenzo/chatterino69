@@ -6,6 +6,7 @@
 #include <memory>
 
 class QTcpServer;
+class QTcpSocket;
 
 namespace chatterino {
 
@@ -43,8 +44,7 @@ Q_SIGNALS:
 
 private:
     void onConnection();
-    void respond(class QTcpSocket *socket, const QString &title,
-                 const QString &body);
+    void respond(QTcpSocket *socket, const QString &title, const QString &body);
 
     std::unique_ptr<QTcpServer> server_;
     QString redirectUri_;
