@@ -3,6 +3,7 @@
 #include "providers/kick/KickMessage.hpp"
 
 #include <pajlada/signals/signal.hpp>
+#include <QNetworkAccessManager>
 #include <QObject>
 #include <QString>
 #include <QTimer>
@@ -80,19 +81,26 @@ private:
     /// Send Pusher protocol message
     void sendPusherMessage(const QString &event, const QJsonObject &data = {});
 
-    /// Pusher WebSocket endpoint for Kick
-    static constexpr const char *KICK_PUSHER_ENDPOINT =
-        "wss://ws-us2.pusher.com/app/"
-        "32cbd69e4b950bf97679?protocol=7&client=js&version=8.4.0-rc2&flash="
-        "false";
+    void openPusher(const QString &appKey, const QString &cluster);
+
+    /// Kick hands out its Pusher app key from this descriptor and rotates it
+    /// (32cbd69e... was retired in 2026-11), so it is asked for on every connect
+    static constexpr const char *KICK_REALTIME_DESCRIPTOR =
+        "https://web.kick.com/api/v1/realtime/connection";
+
+    /// Used when the descriptor request fails
+    static constexpr const char *FALLBACK_APP_KEY = "34bf7a0ff419a2a775b9";
+    static constexpr const char *FALLBACK_CLUSTER = "us2";
 
     /// Pusher ping interval (30 seconds)
     static constexpr int PING_INTERVAL_MS = 30000;
 
     std::unique_ptr<QWebSocket> socket_;
     std::unique_ptr<QTimer> pingTimer_;
+    QNetworkAccessManager network_;
     QString socketId_;
     bool isConnected_{false};
+    QNetworkReply *pendingDescriptor_{nullptr};
 };
 
 }  // namespace chatterino

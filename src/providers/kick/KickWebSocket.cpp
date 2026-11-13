@@ -5,6 +5,8 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QNetworkReply>
+#include <QNetworkRequest>
 
 namespace chatterino {
 
@@ -37,18 +39,89 @@ KickWebSocket::~KickWebSocket()
 
 bool KickWebSocket::connect()
 {
-    if (this->isConnected_)
+    if (this->isConnected_ || this->pendingDescriptor_ != nullptr ||
+        this->socket_->state() != QAbstractSocket::UnconnectedState)
     {
         return true;
     }
 
-    qCDebug(chatterinoKick) << "Connecting to Kick WebSocket...";
-    this->socket_->open(QUrl(QString::fromLatin1(KICK_PUSHER_ENDPOINT)));
+    qCDebug(chatterinoKick) << "Fetching Kick realtime descriptor...";
+
+    QNetworkRequest request{
+        QUrl{QString::fromLatin1(KICK_REALTIME_DESCRIPTOR)}};
+    request.setHeader(QNetworkRequest::UserAgentHeader, "Chatterino7");
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    request.setRawHeader("Accept", "application/json");
+
+    QJsonObject body{
+        {"client", QJsonObject{{"id", "chatterino"}, {"type", "web"}}},
+        {"capabilities",
+         QJsonObject{{"accepted_providers",
+                      QJsonArray{QJsonObject{{"provider", "pusher"}}}}}},
+    };
+
+    auto *reply = this->network_.post(
+        request, QJsonDocument(body).toJson(QJsonDocument::Compact));
+    this->pendingDescriptor_ = reply;
+
+    QObject::connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        reply->deleteLater();
+        this->pendingDescriptor_ = nullptr;
+        if (reply->error() == QNetworkReply::OperationCanceledError)
+        {
+            return;
+        }
+
+        QString appKey = QString::fromLatin1(FALLBACK_APP_KEY);
+        QString cluster = QString::fromLatin1(FALLBACK_CLUSTER);
+
+        auto connections = QJsonDocument::fromJson(reply->readAll())
+                               .object()["data"]
+                               .toObject()["connections"]
+                               .toArray();
+        bool found = false;
+        for (const auto &entry : connections)
+        {
+            auto conn = entry.toObject();
+            auto creds = conn["credentials"].toObject();
+            if (conn["provider"].toString() == "pusher" &&
+                !creds["app_key"].toString().isEmpty() &&
+                !creds["cluster"].toString().isEmpty())
+            {
+                appKey = creds["app_key"].toString();
+                cluster = creds["cluster"].toString();
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+        {
+            qCWarning(chatterinoKick)
+                << "Kick realtime descriptor gave no Pusher credentials ("
+                << reply->errorString() << "), using the built-in key";
+        }
+
+        this->openPusher(appKey, cluster);
+    });
     return true;
+}
+
+void KickWebSocket::openPusher(const QString &appKey, const QString &cluster)
+{
+    qCDebug(chatterinoKick)
+        << "Connecting to Kick Pusher app" << appKey << "cluster" << cluster;
+    this->socket_->open(QUrl(QString("wss://ws-%1.pusher.com/app/"
+                                     "%2?protocol=7&client=js&version=8.4.0-"
+                                     "rc2&flash=false")
+                                 .arg(cluster, appKey)));
 }
 
 void KickWebSocket::disconnect()
 {
+    if (this->pendingDescriptor_ != nullptr)
+    {
+        this->pendingDescriptor_->abort();
+    }
     this->pingTimer_->stop();
     if (this->socket_->state() != QAbstractSocket::UnconnectedState)
     {
