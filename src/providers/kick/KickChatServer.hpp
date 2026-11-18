@@ -2,6 +2,7 @@
 
 #include "util/QStringHash.hpp"
 
+#include <boost/signals2/connection.hpp>
 #include <QString>
 
 #include <memory>
@@ -57,6 +58,12 @@ private:
 
     /// Drops entries whose channel has been destroyed.
     void pruneExpired();
+
+    /// Gives @a channel the account that is logged in right now, or takes it
+    /// away after a logout.
+    static void useCurrentAccount(KickChannel &channel);
+
+    boost::signals2::scoped_connection accountChanged_;
 
     std::unique_ptr<KickWebSocket> socket_;
     std::unordered_map<QString, std::weak_ptr<KickChannel>> bySlug_;

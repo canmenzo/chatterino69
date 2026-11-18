@@ -1,9 +1,14 @@
 #include "providers/kick/KickChatServer.hpp"
 
+#include "Application.hpp"
 #include "common/QLogging.hpp"
+#include "controllers/accounts/AccountController.hpp"
+#include "providers/kick/KickAccount.hpp"
+#include "providers/kick/KickApi.hpp"
 #include "providers/kick/KickChannel.hpp"
 #include "providers/kick/KickMessage.hpp"
 #include "providers/kick/KickWebSocket.hpp"
+#include "util/PostToThread.hpp"
 
 #include <tuple>
 
@@ -21,12 +26,48 @@ std::shared_ptr<KickChannel> KickChatServer::getOrCreate(const QString &slug)
         return existing;
     }
 
+    if (!this->accountChanged_.connected())
+    {
+        // The account comes out of the keychain a moment after startup. By
+        // then the saved splits have made their channels without one, and
+        // those could neither send nor moderate until the split was reopened.
+        this->accountChanged_ =
+            getApp()->getAccounts()->kick.currentUserChanged.connect([this] {
+                runInGuiThread([this] {
+                    for (auto &[slug, weak] : this->bySlug_)
+                    {
+                        if (auto channel = weak.lock())
+                        {
+                            useCurrentAccount(*channel);
+                        }
+                    }
+                });
+            });
+    }
+
     auto channel = std::make_shared<KickChannel>(normalized);
     this->bySlug_[normalized] = channel;
+    useCurrentAccount(*channel);
 
     channel->connect();
 
     return channel;
+}
+
+void KickChatServer::useCurrentAccount(KickChannel &channel)
+{
+    auto account = getApp()->getAccounts()->kick.getCurrent();
+    if (!account)
+    {
+        channel.setAccount(nullptr);
+        return;
+    }
+
+    auto api = std::make_shared<KickApi>();
+    api->setAccount(account);
+    channel.setAccount(account);
+    channel.setAuthenticated(true);
+    channel.setApi(api);
 }
 
 std::shared_ptr<KickChannel> KickChatServer::findBySlug(
