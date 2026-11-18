@@ -327,6 +327,18 @@ bool SpoilerGuard::shouldScreen(const Channel &channel, const Message &message)
            0;
 }
 
+void SpoilerGuard::note(const QString &text)
+{
+    QFile file(getApp()->getPaths().miscDirectory +
+               QStringLiteral("/spoiler-guard.log"));
+    if (file.open(QIODevice::Append | QIODevice::Text))
+    {
+        file.write((QDateTime::currentDateTime().toString(Qt::ISODate) +
+                    "\tnote\t" + text + '\n')
+                       .toUtf8());
+    }
+}
+
 bool SpoilerGuard::removedUser(const QString &login)
 {
     return getSettings()->spoilerGuardEnabled &&

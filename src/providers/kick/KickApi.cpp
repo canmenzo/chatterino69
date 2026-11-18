@@ -432,9 +432,19 @@ void KickApi::sendAuthorizedRequest(
         return;
     }
 
+    // A refresh that fails used to end here without a word: the caller never
+    // heard back and whatever it had asked for simply did not happen.
+    auto refreshFailed = [callback] {
+        KickApiResult result;
+        result.errorMessage =
+            QStringLiteral("the Kick login could not be refreshed, log in "
+                           "again in Settings > Platforms");
+        callback(result);
+    };
+
     if (this->account_->isTokenExpired())
     {
-        this->refreshAndRetry(std::move(retry));
+        this->refreshAndRetry(std::move(retry), refreshFailed);
         return;
     }
 
@@ -456,7 +466,8 @@ void KickApi::sendAuthorizedRequest(
         this->networkManager_->sendCustomRequest(request, verb, payload);
 
     QObject::connect(
-        reply, &QNetworkReply::finished, this, [this, reply, callback, retry] {
+        reply, &QNetworkReply::finished, this,
+        [this, reply, callback, retry, refreshFailed] {
             reply->deleteLater();
             this->updateRateLimitFromReply(reply);
 
@@ -470,11 +481,18 @@ void KickApi::sendAuthorizedRequest(
             {
                 result = this->handleErrorResponse(reply);
 
-                if (result.httpStatus == 401)
+                // Kick answers 401 for a token that lacks the scope as well
+                // as for one that expired. A fresh token fixes only the
+                // second, so try that once and then report the error instead
+                // of refreshing forever.
+                if (result.httpStatus == 401 && !this->retriedUnauthorized_)
                 {
-                    this->refreshAndRetry(retry);
+                    this->retriedUnauthorized_ = true;
+                    this->refreshAndRetry(retry, refreshFailed);
                     return;
                 }
+                this->retriedUnauthorized_ = false;
+
                 if (result.httpStatus == 429)
                 {
                     this->rateLimited.invoke(static_cast<int>(std::max<qint64>(
@@ -486,6 +504,7 @@ void KickApi::sendAuthorizedRequest(
                 return;
             }
 
+            this->retriedUnauthorized_ = false;
             result.success = true;
             callback(result);
         });
@@ -632,6 +651,7 @@ KickApiResult KickApi::handleErrorResponse(QNetworkReply *reply)
     // Translate to user-friendly message
     result.errorMessage =
         translateKickError(error, rawApiMessage, secondsUntilReset);
+    result.apiMessage = rawApiMessage;
 
     qCWarning(chatterinoKick)
         << "API error:" << result.httpStatus << rawApiMessage
@@ -640,7 +660,8 @@ KickApiResult KickApi::handleErrorResponse(QNetworkReply *reply)
     return result;
 }
 
-void KickApi::refreshAndRetry(std::function<void()> retryFn)
+void KickApi::refreshAndRetry(std::function<void()> retryFn,
+                              std::function<void()> onFailure)
 {
     if (!this->account_)
     {
@@ -652,20 +673,25 @@ void KickApi::refreshAndRetry(std::function<void()> retryFn)
     // Connect to token refresh result
     // Use shared_ptr to ensure the connection outlives the callback scope
     auto connection = std::make_shared<pajlada::Signals::ScopedConnection>();
-    *connection = this->account_->tokenRefreshed.connect([retryFn, connection](
-                                                             bool success) {
-        if (success)
-        {
-            qCDebug(chatterinoKick) << "Token refreshed, retrying request...";
-            retryFn();
-        }
-        else
-        {
-            qCWarning(chatterinoKick) << "Token refresh failed";
-        }
-        // Disconnect after handling by assigning an empty connection
-        *connection = pajlada::Signals::ScopedConnection{};
-    });
+    *connection = this->account_->tokenRefreshed.connect(
+        [retryFn, onFailure, connection](bool success) {
+            if (success)
+            {
+                qCDebug(chatterinoKick)
+                    << "Token refreshed, retrying request...";
+                retryFn();
+            }
+            else
+            {
+                qCWarning(chatterinoKick) << "Token refresh failed";
+                if (onFailure)
+                {
+                    onFailure();
+                }
+            }
+            // Disconnect after handling by assigning an empty connection
+            *connection = pajlada::Signals::ScopedConnection{};
+        });
 
     this->account_->refreshAccessToken();
 }

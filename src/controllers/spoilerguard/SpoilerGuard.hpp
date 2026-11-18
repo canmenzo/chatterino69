@@ -78,6 +78,11 @@ public:
     void screen(std::shared_ptr<Channel> channel, MessagePtr message,
                 std::optional<MessageFlags> overridingFlags);
 
+    /// Adds a line to spoiler-guard.log. The channels record what a platform
+    /// answered when asked to remove a spoiler, which is the only way to tell
+    /// afterwards why a ban did not happen.
+    static void note(const QString &text);
+
     /// True for a user the guard removed. Their ban notice repeats the user
     /// name, which may be the spoiler, so it is dropped.
     static bool removedUser(const QString &login);

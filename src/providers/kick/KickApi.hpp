@@ -56,6 +56,8 @@ struct KickRateLimitInfo {
 struct KickApiResult {
     bool success{false};
     QString errorMessage;
+    /// What Kick itself answered, before it was reworded for the user.
+    QString apiMessage;
     int httpStatus{0};
     std::optional<KickRateLimitInfo> rateLimit;
 };
@@ -216,7 +218,13 @@ private:
     KickApiResult handleErrorResponse(QNetworkReply *reply);
 
     /// Refresh token if expired and retry request
-    void refreshAndRetry(std::function<void()> retryFn);
+    /// @param onFailure Called when the token could not be refreshed
+    void refreshAndRetry(std::function<void()> retryFn,
+                         std::function<void()> onFailure = {});
+
+    /// Set while a request is being retried after a 401, see
+    /// sendAuthorizedRequest
+    bool retriedUnauthorized_{false};
 
     /// Shared path for the moderation endpoints: checks auth and the rate
     /// limit, refreshes an expired token, then runs the request and translates

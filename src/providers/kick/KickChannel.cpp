@@ -4,6 +4,7 @@
 #include "common/Aliases.hpp"
 #include "common/network/NetworkResult.hpp"
 #include "common/QLogging.hpp"
+#include "controllers/spoilerguard/SpoilerGuard.hpp"
 #include "messages/Emote.hpp"
 #include "messages/Image.hpp"
 #include "messages/Message.hpp"
@@ -612,6 +613,7 @@ void KickChannel::removeSpoiler(const MessagePtr &message, bool banAuthor)
     // fails, so the streamer is told, without the text or the name.
     auto failed = [self = std::weak_ptr<Channel>(this->shared_from_this())](
                       const QString &why) {
+        SpoilerGuard::note("kick: could not remove a spoiler: " + why);
         if (auto channel = self.lock())
         {
             channel->addSystemMessage(
@@ -633,30 +635,44 @@ void KickChannel::removeSpoiler(const MessagePtr &message, bool banAuthor)
         return;
     }
 
-    auto report = [failed](const KickApiResult &result) {
-        if (!result.success)
-        {
-            failed(result.errorMessage.isEmpty()
-                       ? QStringLiteral("HTTP %1").arg(result.httpStatus)
-                       : result.errorMessage);
-        }
-    };
-
     bool ok = false;
     const auto userId = message->userID.toInt(&ok);
     const auto ban = banAuthor && ok && userId > 0;
 
-    // one notice per spoiler: the ban reports when there is one
-    std::function<void(KickApiResult)> onDeleted = report;
-    if (ban)
-    {
-        onDeleted = [](const KickApiResult &) {};
-    }
-    this->api_->deleteChatMessage(message->id, onDeleted);
+    // One notice per spoiler in chat: the ban speaks when there is one. The
+    // log gets every answer.
+    auto report = [failed](const QString &what, bool notify) {
+        return [failed, what, notify](const KickApiResult &result) {
+            if (result.success)
+            {
+                SpoilerGuard::note(QStringLiteral("kick: %1 accepted, HTTP %2")
+                                       .arg(what)
+                                       .arg(result.httpStatus));
+                return;
+            }
+
+            const auto why = QStringLiteral("%1 (%2, HTTP %3)")
+                                 .arg(result.errorMessage, what)
+                                 .arg(result.httpStatus);
+            if (notify)
+            {
+                SpoilerGuard::note("kick said: " + result.apiMessage);
+                failed(why);
+            }
+            else
+            {
+                SpoilerGuard::note("kick: " + why +
+                                   " | Kick said: " + result.apiMessage);
+            }
+        };
+    };
+
+    this->api_->deleteChatMessage(message->id, report("delete", !ban));
     if (ban)
     {
         this->api_->banUser(this->broadcasterUserId_, userId, std::nullopt,
-                            QStringLiteral("Spoiler (automatic)"), report);
+                            QStringLiteral("Spoiler (automatic)"),
+                            report("ban", true));
     }
 }
 
