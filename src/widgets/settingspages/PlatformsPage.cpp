@@ -58,8 +58,9 @@ void PlatformsPage::initLayout(GeneralPageView &layout)
     layout.addDescription(
         "Holds every chat message in your own Twitch and Kick channels, and in "
         "any YouTube chat, until an AI model has read it. Clean messages show "
-        "up about a second late. A story spoiler is never shown: the message "
-        "is removed and its author banned. When the model cannot be reached "
+        "up about a second late. A spoiler, about the story or about what "
+        "the game contains, is never shown: the message is removed and its "
+        "author banned. When the model cannot be reached "
         "the messages stay hidden. Needs an Anthropic API key in the "
         "CHATTERINO_ANTHROPIC_API_KEY environment variable, and a restart "
         "after setting it. Everything it removes is written to "
