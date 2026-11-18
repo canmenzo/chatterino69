@@ -322,4 +322,48 @@ void YouTubeApi::sendMessage(const QString &liveChatId, const QString &text,
     });
 }
 
+void YouTubeApi::banUser(const QString &liveChatId, const QString &channelId,
+                         std::optional<int> seconds,
+                         std::function<void(bool, QString)> cb)
+{
+    this->withFreshToken(cb, [this, liveChatId, channelId, seconds,
+                              cb](QString token) {
+        QUrl url{API_BASE + QStringLiteral("/liveChat/bans")};
+        QUrlQuery q;
+        q.addQueryItem(QStringLiteral("part"), QStringLiteral("snippet"));
+        url.setQuery(q);
+
+        QJsonObject snippet{
+            {"liveChatId", liveChatId},
+            {"type", seconds ? "temporary" : "permanent"},
+            {"bannedUserDetails", QJsonObject{{"channelId", channelId}}},
+        };
+        if (seconds)
+        {
+            snippet["banDurationSeconds"] = *seconds;
+        }
+
+        QNetworkRequest req{url};
+        req.setRawHeader("Authorization", "Bearer " + token.toUtf8());
+        req.setHeader(QNetworkRequest::ContentTypeHeader,
+                      QStringLiteral("application/json"));
+
+        auto *reply = this->network_->post(
+            req, QJsonDocument{QJsonObject{{"snippet", snippet}}}.toJson(
+                     QJsonDocument::Compact));
+
+        QObject::connect(reply, &QNetworkReply::finished, this, [reply, cb] {
+            reply->deleteLater();
+            auto responseBody = reply->readAll();
+
+            if (reply->error() != QNetworkReply::NoError)
+            {
+                cb(false, errorFromReply(reply, responseBody));
+                return;
+            }
+            cb(true, {});
+        });
+    });
+}
+
 }  // namespace chatterino

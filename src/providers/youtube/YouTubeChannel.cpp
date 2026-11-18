@@ -342,6 +342,13 @@ void YouTubeChannel::handleMessage(const YouTubeMessage &message)
         }
     }
 
+    if (message.author.isOwner)
+    {
+        // the streamer's own lines need no spoiler check
+        this->addScreenedMessage(builder.release(), MessageContext::Original);
+        return;
+    }
+
     this->addMessage(builder.release(), MessageContext::Original);
 }
 
@@ -533,6 +540,51 @@ bool YouTubeChannel::isBroadcaster() const
 bool YouTubeChannel::hasModRights() const
 {
     return false;
+}
+
+void YouTubeChannel::removeSpoiler(const MessagePtr &message, bool banAuthor)
+{
+    if (!this->api_ || !this->account_ || !this->account_->isAuthenticated() ||
+        this->videoId_.isEmpty())
+    {
+        return;
+    }
+
+    auto self = std::weak_ptr<Channel>(this->shared_from_this());
+
+    // The Data API cannot delete a message by the id the chat page gave us, so
+    // a line that only needs clearing gets the five minute timeout YouTube's
+    // own moderation menu uses, which hides the author's recent messages.
+    auto ban = [this, authorChannelId = message->loginName,
+                seconds = banAuthor ? std::nullopt : std::optional<int>{300}](
+                   const QString &liveChatId) {
+        this->api_->banUser(liveChatId, authorChannelId, seconds,
+                            [authorChannelId](bool ok, const QString &error) {
+                                if (!ok)
+                                {
+                                    qCWarning(chatterinoApp)
+                                        << "Spoiler guard could not remove"
+                                        << authorChannelId << error;
+                                }
+                            });
+    };
+
+    if (!this->liveChatId_.isEmpty())
+    {
+        ban(this->liveChatId_);
+        return;
+    }
+
+    this->api_->resolveLiveChatId(
+        this->videoId_,
+        [this, self, ban](const QString &liveChatId, const QString &) {
+            if (self.expired() || liveChatId.isEmpty())
+            {
+                return;
+            }
+            this->liveChatId_ = liveChatId;
+            ban(liveChatId);
+        });
 }
 
 bool YouTubeChannel::canSendMessage() const

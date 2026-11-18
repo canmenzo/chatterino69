@@ -298,6 +298,10 @@ set(SOURCE_FILES
         controllers/sound/NullBackend.cpp
         controllers/sound/NullBackend.hpp
 
+        controllers/spoilerguard/SpoilerGuard.cpp
+        controllers/spoilerguard/SpoilerGuard.hpp
+        controllers/spoilerguard/SpoilerGuardPrompt.hpp
+
         controllers/twitch/LiveController.cpp
         controllers/twitch/LiveController.hpp
 

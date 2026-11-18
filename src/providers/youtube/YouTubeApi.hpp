@@ -5,6 +5,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 
 class QNetworkAccessManager;
 
@@ -40,6 +41,13 @@ public:
     /// liveChatMessages.insert, 50 quota units.
     void sendMessage(const QString &liveChatId, const QString &text,
                      std::function<void(bool ok, QString error)> cb);
+
+    /// liveChatBans.insert, 200 quota units. Works only on a chat the signed-in
+    /// account owns or moderates.
+    /// @param seconds Omit for a permanent ban, set for a timeout
+    void banUser(const QString &liveChatId, const QString &channelId,
+                 std::optional<int> seconds,
+                 std::function<void(bool ok, QString error)> cb);
 
     /// Exchanges an authorization code for tokens, then fills in the account's
     /// channel identity.

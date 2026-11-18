@@ -46,6 +46,7 @@ public:
     bool isMod() const override;
     bool isBroadcaster() const override;
     bool hasModRights() const override;
+    void removeSpoiler(const MessagePtr &message, bool banAuthor) override;
     bool canSendMessage() const override;
     bool isLive() const override;
     void reconnect() override;

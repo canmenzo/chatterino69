@@ -939,6 +939,29 @@ bool TwitchChannel::isBroadcaster() const
            app->getAccounts()->twitch.getCurrent()->getUserName();
 }
 
+void TwitchChannel::removeSpoiler(const MessagePtr &message, bool banAuthor)
+{
+    // A whisper is screened in every open chat. It must only cost its author
+    // their place in the streamer's own.
+    auto user = getApp()->getAccounts()->twitch.getCurrent();
+    if (user->isAnon() || message->userID.isEmpty() || !this->isBroadcaster())
+    {
+        return;
+    }
+
+    // Without a ban this is a one second timeout rather than a deleted
+    // message: both clear the line for every viewer, but a deletion notice
+    // quotes the text it removed.
+    getHelix()->banUser(
+        this->roomId(), user->getUserId(), message->userID,
+        banAuthor ? std::nullopt : std::optional<int>{1},
+        QStringLiteral("Spoiler (automatic)"), [] {},
+        [name = message->loginName](auto /*error*/, const QString &text) {
+            qCWarning(chatterinoTwitch)
+                << "Spoiler guard could not remove" << name << text;
+        });
+}
+
 bool TwitchChannel::hasHighRateLimit() const
 {
     return this->isMod() || this->isBroadcaster() || this->isVip();
@@ -1418,7 +1441,9 @@ void TwitchChannel::markDisconnected()
 
 void TwitchChannel::loadRecentMessages()
 {
-    if (!getSettings()->loadTwitchMessageHistoryOnConnect)
+    // History is inserted in one piece and would skip the spoiler guard.
+    if (!getSettings()->loadTwitchMessageHistoryOnConnect ||
+        (getSettings()->spoilerGuardEnabled && this->isBroadcaster()))
     {
         return;
     }
@@ -1485,7 +1510,9 @@ void TwitchChannel::loadRecentMessages()
 
 void TwitchChannel::loadRecentMessagesReconnect()
 {
-    if (!getSettings()->loadTwitchMessageHistoryOnConnect)
+    // History is inserted in one piece and would skip the spoiler guard.
+    if (!getSettings()->loadTwitchMessageHistoryOnConnect ||
+        (getSettings()->spoilerGuardEnabled && this->isBroadcaster()))
     {
         return;
     }

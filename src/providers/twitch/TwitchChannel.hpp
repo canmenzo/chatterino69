@@ -181,6 +181,7 @@ public:
     bool isVip() const;
     bool isStaff() const;
     bool isBroadcaster() const override;
+    void removeSpoiler(const MessagePtr &message, bool banAuthor) override;
     bool hasHighRateLimit() const override;
     bool canReconnect() const override;
     void reconnect() override;

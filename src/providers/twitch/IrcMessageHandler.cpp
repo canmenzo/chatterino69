@@ -7,6 +7,7 @@
 #include "common/QLogging.hpp"
 #include "controllers/accounts/AccountController.hpp"
 #include "controllers/ignores/IgnoreController.hpp"
+#include "controllers/spoilerguard/SpoilerGuard.hpp"
 #include "messages/Link.hpp"
 #include "messages/Message.hpp"
 #include "messages/MessageBuilder.hpp"
@@ -1185,8 +1186,12 @@ void IrcMessageHandler::addMessage(Communi::IrcMessage *message,
         const auto highlighted = msg->flags.has(MessageFlag::Highlighted);
         const auto showInMentions = msg->flags.has(MessageFlag::ShowInMentions);
 
+        // A message the spoiler guard holds back must not reach the mentions
+        // tab ahead of its verdict; the guard adds it there on release.
         if (highlighted && showInMentions &&
-            sink.sinkTraits().has(MessageSinkTrait::AddMentionsToGlobalChannel))
+            sink.sinkTraits().has(
+                MessageSinkTrait::AddMentionsToGlobalChannel) &&
+            !SpoilerGuard::shouldScreen(*chan, *msg))
         {
             twitch.getMentionsChannel()->addMessage(msg,
                                                     MessageContext::Original);

@@ -595,11 +595,40 @@ void KickChannel::onMessageReceived(const KickMessage &kickMessage)
     this->parseMessageContent(builder, kickMessage.content, kickMessage.emotes);
 
     // Store Kick-specific metadata
+    builder.message().id = kickMessage.id;
+    builder.message().userID = kickUserIdStr;
     builder.message().loginName = kickMessage.sender.slug;
     builder.message().displayName = kickMessage.sender.username;
+    builder.message().messageText = kickMessage.content;
 
     auto message = builder.release();
     this->addMessage(message, MessageContext::Original);
+}
+
+void KickChannel::removeSpoiler(const MessagePtr &message, bool banAuthor)
+{
+    if (!this->api_ || this->broadcasterUserId_ == 0)
+    {
+        return;
+    }
+
+    auto report = [name = message->loginName](const KickApiResult &result) {
+        if (!result.success)
+        {
+            qCWarning(chatterinoKick) << "Spoiler guard could not remove"
+                                      << name << result.errorMessage;
+        }
+    };
+
+    this->api_->deleteChatMessage(message->id, report);
+
+    bool ok = false;
+    const auto userId = message->userID.toInt(&ok);
+    if (banAuthor && ok && userId > 0)
+    {
+        this->api_->banUser(this->broadcasterUserId_, userId, std::nullopt,
+                            QStringLiteral("Spoiler (automatic)"), report);
+    }
 }
 
 void KickChannel::loadUserSevenTVCosmetics(int kickUserId,

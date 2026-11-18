@@ -44,6 +44,7 @@ public:
     bool isVip() const;
     bool isBroadcaster() const override;
     bool hasModRights() const override;
+    void removeSpoiler(const MessagePtr &message, bool banAuthor) override;
 
     /// The chat restrictions this channel currently has switched on.
     [[nodiscard]] const KickApi::RoomModes &roomModes() const;

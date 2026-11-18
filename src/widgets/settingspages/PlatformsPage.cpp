@@ -54,6 +54,31 @@ void PlatformsPage::initLayout(GeneralPageView &layout)
 {
     auto &s = *getSettings();
 
+    layout.addTitle("Spoiler guard");
+    layout.addDescription(
+        "Holds every chat message in your own Twitch and Kick channels, and in "
+        "any YouTube chat, until an AI model has read it. Clean messages show "
+        "up about a second late. A story spoiler is never shown: the message "
+        "is removed and its author banned. When the model cannot be reached "
+        "the messages stay hidden. Needs an Anthropic API key in the "
+        "CHATTERINO_ANTHROPIC_API_KEY environment variable, and a restart "
+        "after setting it. Everything it removes is written to "
+        "spoiler-guard.log in the Misc folder.");
+
+    SettingWidget::checkbox("Enable spoiler guard", s.spoilerGuardEnabled)
+        ->addTo(layout);
+    {
+        auto *guardForm = new QFormLayout();
+        layout.addLayout(guardForm);
+
+        auto *gameEdit = new QLineEdit(s.spoilerGuardGame);
+        QObject::connect(gameEdit, &QLineEdit::textChanged,
+                         [](const QString &value) {
+                             getSettings()->spoilerGuardGame = value;
+                         });
+        guardForm->addRow("Game being played:", gameEdit);
+    }
+
     layout.addTitle("Twitch private API");
     layout.addDescription(
         "Twitch has no public API for pinning a message, running a prediction "

@@ -100,6 +100,11 @@ public:
     void addMessage(
         MessagePtr message, MessageContext context,
         std::optional<MessageFlags> overridingFlags = std::nullopt) final;
+    /// addMessage without the spoiler guard in front of it, for a message the
+    /// guard has already let through.
+    void addScreenedMessage(
+        MessagePtr message, MessageContext context,
+        std::optional<MessageFlags> overridingFlags = std::nullopt);
     void addMessagesAtStart(const std::vector<MessagePtr> &messages_);
 
     void addSystemMessage(const QString &contents);
@@ -127,6 +132,10 @@ public:
     void applySimilarityFilters(const MessagePtr &message) const final;
 
     MessageSinkTraits sinkTraits() const final;
+
+    /// Takes a spoiler the guard caught out of chat for every viewer: bans the
+    /// author for good, or only clears what they wrote.
+    virtual void removeSpoiler(const MessagePtr &message, bool banAuthor);
 
     // CHANNEL INFO
     virtual bool canSendMessage() const;

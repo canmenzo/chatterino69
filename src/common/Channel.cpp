@@ -1,6 +1,7 @@
 #include "common/Channel.hpp"
 
 #include "Application.hpp"
+#include "controllers/spoilerguard/SpoilerGuard.hpp"
 #include "messages/Message.hpp"
 #include "messages/MessageBuilder.hpp"
 #include "messages/MessageSimilarity.hpp"
@@ -94,6 +95,25 @@ MessagePtr Channel::getLastMessage() const
 void Channel::addMessage(MessagePtr message, MessageContext context,
                          std::optional<MessageFlags> overridingFlags)
 {
+    if (context == MessageContext::Original &&
+        SpoilerGuard::shouldScreen(*this, *message))
+    {
+        message->freeze();
+        SpoilerGuard::instance().screen(this->shared_from_this(),
+                                        std::move(message), overridingFlags);
+        return;
+    }
+
+    this->addScreenedMessage(std::move(message), context, overridingFlags);
+}
+
+void Channel::removeSpoiler(const MessagePtr & /*message*/, bool /*banAuthor*/)
+{
+}
+
+void Channel::addScreenedMessage(MessagePtr message, MessageContext context,
+                                 std::optional<MessageFlags> overridingFlags)
+{
     message->freeze();
 
     MessagePtr deleted;
@@ -131,6 +151,11 @@ void Channel::addSystemMessage(const QString &contents)
 
 void Channel::addOrReplaceTimeout(MessagePtr message, const QDateTime &now)
 {
+    if (SpoilerGuard::removedUser(message->timeoutUser))
+    {
+        return;
+    }
+
     addOrReplaceChannelTimeout(
         this->getMessageSnapshot(20), std::move(message), now,
         [this](auto /*idx*/, auto msg, auto replacement) {

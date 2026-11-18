@@ -654,6 +654,14 @@ public:
     /// YouTube Integration
     BoolSetting enableYouTubeIntegration = {"/youtube/enabled", false};
 
+    /// Spoiler guard: holds chat in your own channels until a model has read
+    /// it, see controllers/spoilerguard/SpoilerGuard.hpp
+    BoolSetting spoilerGuardEnabled = {"/spoilerGuard/enabled", false};
+    QStringSetting spoilerGuardGame = {"/spoilerGuard/game",
+                                       "Grand Theft Auto VI (GTA 6)"};
+    QStringSetting spoilerGuardModel = {"/spoilerGuard/model",
+                                        "claude-haiku-5-5"};
+
     /// Usercard
     BoolSetting showUsercardNameHistoryButton = {
         "/usercard/showNameHistoryButton", true};
