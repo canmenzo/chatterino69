@@ -1,6 +1,7 @@
 #include "providers/kick/KickOAuthFlow.hpp"
 
 #include "common/QLogging.hpp"
+#include "controllers/spoilerguard/SpoilerGuard.hpp"
 
 #include <QCryptographicHash>
 #include <QDesktopServices>
@@ -140,7 +141,10 @@ QString KickOAuthFlow::buildAuthorizationUrl() const
     query.addQueryItem("client_id", clientConfig().clientId);
     query.addQueryItem("redirect_uri", REDIRECT_URI);
     query.addQueryItem("scope",
-                       "chat:write user:read channel:read moderation:ban");
+                       // deleting a message is its own scope, separate from
+                       // banning its author
+                       "chat:write user:read channel:read moderation:ban "
+                       "moderation:chat_message:manage");
     query.addQueryItem("state", this->state_);
     query.addQueryItem("code_challenge", this->codeChallenge_);
     query.addQueryItem("code_challenge_method", "S256");
@@ -486,9 +490,11 @@ void KickOAuthFlow::exchangeCodeForTokens(const QString &code)
             }
 
             qCDebug(chatterinoKick) << "Successfully obtained tokens";
-            qCDebug(chatterinoKick)
-                << "Granted scopes:" << tokens.scope
-                << "| Requested: chat:write user:read channel:read";
+            qCDebug(chatterinoKick) << "Granted scopes:" << tokens.scope;
+            // Kick silently drops a scope the developer app has not switched
+            // on, and the spoiler guard cannot ban without the moderation
+            // ones, so keep what was actually granted where it can be read.
+            SpoilerGuard::note("kick login granted scopes: " + tokens.scope);
 
             // Warn if chat:write scope wasn't granted
             if (!tokens.scope.contains("chat:write"))
