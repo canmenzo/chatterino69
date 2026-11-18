@@ -44,6 +44,11 @@ public:
     /// Get the display name showing all sources (e.g., "T:xqc + K:xqc")
     [[nodiscard]] const QString &getDisplayName() const override;
 
+    /// What the split header and the tab show, naming every platform in the
+    /// merge: "menzocs (Twitch + Kick + YouTube)". The stored name only says
+    /// "menzocs + menzocs" and never learns about a platform added later.
+    [[nodiscard]] const QString &getLocalizedName() const override;
+
     /// Get all source channels
     [[nodiscard]] const std::vector<ChannelPtr> &getSourceChannels() const;
 
@@ -113,6 +118,7 @@ private:
     std::vector<ChannelPtr> sourceChannels_;
     PlatformSelection platformSelection_{PlatformSelection::Both};
     mutable QString cachedDisplayName_;
+    mutable QString cachedTitle_;
     std::vector<PendingSentMessage> pendingSentMessages_;
 
     pajlada::Signals::SignalHolder signalHolder_;

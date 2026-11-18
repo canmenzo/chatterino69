@@ -29,6 +29,27 @@ TEST(MergedChannel, carriesThreePlatformsAtOnce)
     EXPECT_EQ(merged.getDisplayName(), "T:menzocs + K:menzocs + Y:@menzocs");
 }
 
+TEST(MergedChannel, titleNamesEveryPlatform)
+{
+    // the name the merge was saved under says nothing about its platforms
+    MergedChannel same("menzocs + menzocs",
+                       {
+                           plainChannel("menzocs", Channel::Type::Twitch),
+                           plainChannel("menzocs", Channel::Type::Kick),
+                       });
+    EXPECT_EQ(same.getLocalizedName(), "menzocs (Twitch + Kick)");
+
+    same.addSourceChannel(plainChannel("@MenzoCS", Channel::Type::YouTube));
+    EXPECT_EQ(same.getLocalizedName(), "menzocs (Twitch + Kick + YouTube)");
+
+    MergedChannel mixed("xqc + other",
+                        {
+                            plainChannel("xqc", Channel::Type::Twitch),
+                            plainChannel("trainwreckstv", Channel::Type::Kick),
+                        });
+    EXPECT_EQ(mixed.getLocalizedName(), "Twitch:xqc + Kick:trainwreckstv");
+}
+
 TEST(MergedChannel, acceptsAThirdPlatformAfterTheFact)
 {
     // This is the path the "Merge with..." dialog takes when the split is

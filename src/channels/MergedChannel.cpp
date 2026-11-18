@@ -233,6 +233,42 @@ void MergedChannel::updateCachedDisplayName() const
     this->cachedDisplayName_ = parts.join(" + ");
 }
 
+const QString &MergedChannel::getLocalizedName() const
+{
+    if (this->sourceChannels_.empty())
+    {
+        return this->getName();
+    }
+
+    QStringList platforms;
+    QStringList named;
+    QString shared;
+    bool sameName = true;
+    for (const auto &channel : this->sourceChannels_)
+    {
+        const auto platform = platformDisplayName(channel->getType());
+        // YouTube is addressed by handle, the others by plain name
+        auto name = channel->getName();
+        if (name.startsWith('@'))
+        {
+            name.remove(0, 1);
+        }
+        if (shared.isEmpty())
+        {
+            shared = name;
+        }
+        sameName = sameName && name.compare(shared, Qt::CaseInsensitive) == 0;
+
+        platforms.append(platform);
+        named.append(platform + ':' + channel->getName());
+    }
+
+    this->cachedTitle_ =
+        sameName ? QStringLiteral("%1 (%2)").arg(shared, platforms.join(" + "))
+                 : named.join(" + ");
+    return this->cachedTitle_;
+}
+
 const std::vector<ChannelPtr> &MergedChannel::getSourceChannels() const
 {
     return this->sourceChannels_;
