@@ -56,6 +56,34 @@ MessagePtr chatLine(const QString &user, const QString &text)
     return builder.release();
 }
 
+/// What viewers wrote, without the lines the client adds itself.
+std::vector<MessagePtr> chatLines(const Channel &channel)
+{
+    std::vector<MessagePtr> lines;
+    for (const auto &message : channel.getMessageSnapshot())
+    {
+        if (!message->flags.has(MessageFlag::System))
+        {
+            lines.push_back(message);
+        }
+    }
+    return lines;
+}
+
+size_t systemLinesWith(const Channel &channel, const QString &text)
+{
+    size_t count = 0;
+    for (const auto &message : channel.getMessageSnapshot())
+    {
+        if (message->flags.has(MessageFlag::System) &&
+            message->messageText.contains(text))
+        {
+            count++;
+        }
+    }
+    return count;
+}
+
 QByteArray reply(const QString &stopReason, const QString &text)
 {
     return QJsonDocument{
@@ -160,6 +188,15 @@ TEST(SpoilerGuard, screensOwnChatsAndEveryWhisper)
     Channel merged("merged", Channel::Type::Merged);
     EXPECT_FALSE(SpoilerGuard::shouldScreen(merged, *line));
 
+    // A channel named in the settings is guarded with no login behind it: a
+    // Kick login that had quietly expired once left the whole chat unscreened.
+    Channel kick("MenzoCS", Channel::Type::Kick);
+    EXPECT_FALSE(SpoilerGuard::shouldScreen(kick, *line));
+    getSettings()->spoilerGuardChannels = "someoneelse, menzocs";
+    EXPECT_TRUE(SpoilerGuard::shouldScreen(kick, *line));
+    EXPECT_FALSE(SpoilerGuard::shouldScreen(other, *line));
+    getSettings()->spoilerGuardChannels = "";
+
     getSettings()->spoilerGuardEnabled = false;
     EXPECT_FALSE(SpoilerGuard::shouldScreen(youtube, *line));
 }
@@ -176,7 +213,7 @@ TEST(SpoilerGuard, holdsLinesUntilTheModelHasReadThem)
     MockApplication app;
     getSettings()->spoilerGuardEnabled = true;
     auto channel =
-        std::make_shared<RecordingChannel>("@test", Channel::Type::YouTube);
+        std::make_shared<RecordingChannel>("@live", Channel::Type::YouTube);
 
     channel->addMessage(chatLine("kaan34", "selam hocam hayirli yayinlar"),
                         MessageContext::Original);
@@ -189,22 +226,25 @@ TEST(SpoilerGuard, holdsLinesUntilTheModelHasReadThem)
                         MessageContext::Original);
     channel->addSystemMessage("joined");
 
-    // only the system message got through unscreened
-    ASSERT_EQ(channel->getMessageSnapshot().size(), 1u);
+    // nothing a viewer wrote is shown yet, system lines pass straight through
+    ASSERT_TRUE(chatLines(*channel).empty());
+    EXPECT_EQ(systemLinesWith(*channel, "joined"), 1u);
+    EXPECT_EQ(systemLinesWith(*channel, "is screening this chat"), 1u)
+        << "the chat is told once that the guard is at work";
 
     QElapsedTimer waited;
     waited.start();
-    while (channel->getMessageSnapshot().size() + channel->removed.size() < 5 &&
+    while (chatLines(*channel).size() + channel->removed.size() < 4 &&
            waited.elapsed() < 30000)
     {
         QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
     }
     getSettings()->spoilerGuardEnabled = false;
 
-    const auto shown = channel->getMessageSnapshot();
-    ASSERT_EQ(shown.size(), 3u) << "took " << waited.elapsed() << "ms";
-    EXPECT_EQ(shown[1]->messageText, "selam hocam hayirli yayinlar");
-    EXPECT_EQ(shown[2]->messageText, "grafikler efsane lan");
+    const auto shown = chatLines(*channel);
+    ASSERT_EQ(shown.size(), 2u) << "took " << waited.elapsed() << "ms";
+    EXPECT_EQ(shown[0]->messageText, "selam hocam hayirli yayinlar");
+    EXPECT_EQ(shown[1]->messageText, "grafikler efsane lan");
 
     ASSERT_EQ(channel->removed.size(), 2u);
     EXPECT_TRUE(channel->removed[0].first.startsWith("Jason sonunda"));
@@ -228,14 +268,17 @@ TEST(SpoilerGuard, showsLinesInTheOrderTheyArrived)
     MockApplication app;
     getSettings()->spoilerGuardEnabled = true;
     auto channel =
-        std::make_shared<RecordingChannel>("@test", Channel::Type::YouTube);
+        std::make_shared<RecordingChannel>("@order", Channel::Type::YouTube);
 
     QElapsedTimer clock;
     clock.start();
     std::vector<qint64> writtenAt;
     std::vector<qint64> shownAt;
-    std::ignore = channel->messageAppended.connect([&](auto &, auto) {
-        shownAt.push_back(clock.elapsed());
+    std::ignore = channel->messageAppended.connect([&](auto &message, auto) {
+        if (!message->flags.has(MessageFlag::System))
+        {
+            shownAt.push_back(clock.elapsed());
+        }
     });
 
     const QStringList texts{
@@ -267,7 +310,7 @@ TEST(SpoilerGuard, showsLinesInTheOrderTheyArrived)
     }
     getSettings()->spoilerGuardEnabled = false;
 
-    const auto shown = channel->getMessageSnapshot();
+    const auto shown = chatLines(*channel);
     ASSERT_EQ(shown.size(), static_cast<size_t>(texts.size()));
     qint64 slowest = 0;
     for (qsizetype i = 0; i < texts.size(); i++)
@@ -296,24 +339,24 @@ TEST(SpoilerGuard, keepsLinesHiddenWhenTheModelCannotBeReached)
     getSettings()->spoilerGuardEnabled = true;
     qputenv("CHATTERINO_ANTHROPIC_API_KEY", "sk-ant-not-a-real-key");
     auto channel =
-        std::make_shared<RecordingChannel>("@test", Channel::Type::YouTube);
+        std::make_shared<RecordingChannel>("@down", Channel::Type::YouTube);
 
     channel->addMessage(chatLine("kaan34", "selam hocam"),
                         MessageContext::Original);
 
     QElapsedTimer waited;
     waited.start();
-    while (!channel->hasMessages() && waited.elapsed() < 30000)
+    while (systemLinesWith(*channel, "could not check") == 0 &&
+           waited.elapsed() < 30000)
     {
         QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
     }
     getSettings()->spoilerGuardEnabled = false;
     qputenv("CHATTERINO_ANTHROPIC_API_KEY", realKey);
 
-    // the only thing shown is the guard saying it could not check the line
-    const auto shown = channel->getMessageSnapshot();
-    ASSERT_EQ(shown.size(), 1u);
-    EXPECT_TRUE(shown[0]->flags.has(MessageFlag::System));
+    // the streamer is told, the line is not shown, nobody is banned
+    EXPECT_EQ(systemLinesWith(*channel, "could not check"), 1u);
+    EXPECT_TRUE(chatLines(*channel).empty());
     EXPECT_TRUE(channel->removed.empty());
 }
 

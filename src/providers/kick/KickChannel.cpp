@@ -543,7 +543,8 @@ void KickChannel::onMessageReceived(const KickMessage &kickMessage)
     builder.message().flags.set(MessageFlag::Kick);
 
     // Build username element with color
-    builder.emplace<TimestampElement>(kickMessage.createdAt.time());
+    builder.emplace<TimestampElement>(
+        kickMessage.createdAt.toLocalTime().time());
 
     // Add badges (if any)
     for (const auto &badge : kickMessage.sender.identity.badges)
@@ -607,24 +608,52 @@ void KickChannel::onMessageReceived(const KickMessage &kickMessage)
 
 void KickChannel::removeSpoiler(const MessagePtr &message, bool banAuthor)
 {
-    if (!this->api_ || this->broadcasterUserId_ == 0)
-    {
-        return;
-    }
-
-    auto report = [name = message->loginName](const KickApiResult &result) {
-        if (!result.success)
+    // The line stays hidden here either way. Viewers still see it when this
+    // fails, so the streamer is told, without the text or the name.
+    auto failed = [self = std::weak_ptr<Channel>(this->shared_from_this())](
+                      const QString &why) {
+        if (auto channel = self.lock())
         {
-            qCWarning(chatterinoKick) << "Spoiler guard could not remove"
-                                      << name << result.errorMessage;
+            channel->addSystemMessage(
+                QStringLiteral("Spoiler guard hid a message but could not "
+                               "remove it from Kick chat: %1")
+                    .arg(why));
         }
     };
 
-    this->api_->deleteChatMessage(message->id, report);
+    if (!this->api_ || !this->isAuthenticated_)
+    {
+        failed(QStringLiteral("you are not logged in to Kick, log in again "
+                              "in Settings > Platforms"));
+        return;
+    }
+    if (this->broadcasterUserId_ == 0)
+    {
+        failed(QStringLiteral("the channel has not finished loading"));
+        return;
+    }
+
+    auto report = [failed](const KickApiResult &result) {
+        if (!result.success)
+        {
+            failed(result.errorMessage.isEmpty()
+                       ? QStringLiteral("HTTP %1").arg(result.httpStatus)
+                       : result.errorMessage);
+        }
+    };
 
     bool ok = false;
     const auto userId = message->userID.toInt(&ok);
-    if (banAuthor && ok && userId > 0)
+    const auto ban = banAuthor && ok && userId > 0;
+
+    // one notice per spoiler: the ban reports when there is one
+    std::function<void(KickApiResult)> onDeleted = report;
+    if (ban)
+    {
+        onDeleted = [](const KickApiResult &) {};
+    }
+    this->api_->deleteChatMessage(message->id, onDeleted);
+    if (ban)
     {
         this->api_->banUser(this->broadcasterUserId_, userId, std::nullopt,
                             QStringLiteral("Spoiler (automatic)"), report);

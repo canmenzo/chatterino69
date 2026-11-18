@@ -944,8 +944,30 @@ void TwitchChannel::removeSpoiler(const MessagePtr &message, bool banAuthor)
     // A whisper is screened in every open chat. It must only cost its author
     // their place in the streamer's own.
     auto user = getApp()->getAccounts()->twitch.getCurrent();
-    if (user->isAnon() || message->userID.isEmpty() || !this->isBroadcaster())
+    if (message->userID.isEmpty() ||
+        (!user->isAnon() && !this->isBroadcaster()))
     {
+        return;
+    }
+
+    // The line stays hidden here either way. Viewers still see it when this
+    // fails, so the streamer is told, without the text or the name.
+    auto failed = [self = weakOf<Channel>(this)](const QString &why) {
+        if (auto channel = self.lock())
+        {
+            channel->addSystemMessage(
+                QStringLiteral("Spoiler guard hid a message but could not "
+                               "remove its author from Twitch chat: %1")
+                    .arg(why));
+        }
+    };
+
+    if (user->isAnon())
+    {
+        if (!message->flags.has(MessageFlag::Whisper))
+        {
+            failed(QStringLiteral("you are not logged in to Twitch"));
+        }
         return;
     }
 
@@ -956,9 +978,8 @@ void TwitchChannel::removeSpoiler(const MessagePtr &message, bool banAuthor)
         this->roomId(), user->getUserId(), message->userID,
         banAuthor ? std::nullopt : std::optional<int>{1},
         QStringLiteral("Spoiler (automatic)"), [] {},
-        [name = message->loginName](auto /*error*/, const QString &text) {
-            qCWarning(chatterinoTwitch)
-                << "Spoiler guard could not remove" << name << text;
+        [failed](auto /*error*/, const QString &text) {
+            failed(text);
         });
 }
 

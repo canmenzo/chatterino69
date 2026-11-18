@@ -77,6 +77,17 @@ void PlatformsPage::initLayout(GeneralPageView &layout)
                              getSettings()->spoilerGuardGame = value;
                          });
         guardForm->addRow("Game being played:", gameEdit);
+
+        auto *channelsEdit = new QLineEdit(s.spoilerGuardChannels);
+        channelsEdit->setPlaceholderText("your Twitch and Kick channel name");
+        channelsEdit->setToolTip(
+            "The guard knows a channel is yours from your login. Listing the "
+            "name here keeps it guarded when that login has expired.");
+        QObject::connect(channelsEdit, &QLineEdit::textChanged,
+                         [](const QString &value) {
+                             getSettings()->spoilerGuardChannels = value;
+                         });
+        guardForm->addRow("Your channels:", channelsEdit);
     }
 
     layout.addTitle("Twitch private API");

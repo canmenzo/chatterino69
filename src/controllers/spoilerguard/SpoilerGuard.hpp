@@ -136,6 +136,8 @@ private:
     /// reactions to what is on screen from a spoiler.
     QStringList recent_;
     QSet<QString> removedUsers_;
+    /// The chats that were told the guard is screening them.
+    QSet<QString> announced_;
 
     /// Each user name is judged once: while a request carries it, and after
     /// it was found harmless or a spoiler.

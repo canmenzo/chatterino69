@@ -17,6 +17,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QRegularExpression>
 
 #include <algorithm>
 
@@ -45,6 +46,16 @@ constexpr int WARNING_GAP_MS = 30000;
 QString apiKey()
 {
     return qEnvironmentVariable("CHATTERINO_ANTHROPIC_API_KEY");
+}
+
+/// Whether the user named this channel as their own in the settings.
+bool isListed(const QString &channelName)
+{
+    static const QRegularExpression separator(QStringLiteral(R"([\s,;]+)"));
+    return getSettings()
+        ->spoilerGuardChannels.getValue()
+        .split(separator, Qt::SkipEmptyParts)
+        .contains(channelName, Qt::CaseInsensitive);
 }
 
 QString platformName(const Channel &channel)
@@ -284,8 +295,10 @@ bool SpoilerGuard::shouldScreen(const Channel &channel, const Message &message)
             case Channel::Type::Kick:
                 // Only the streamer's own chat: screening someone else's would
                 // put every line of a busy channel through the model for
-                // nothing.
-                if (!channel.isBroadcaster())
+                // nothing. The listed names matter because isBroadcaster()
+                // needs a working login, and a login that quietly expired
+                // must not switch the guard off.
+                if (!channel.isBroadcaster() && !isListed(channel.getName()))
                 {
                     return false;
                 }
@@ -323,6 +336,19 @@ bool SpoilerGuard::removedUser(const QString &login)
 void SpoilerGuard::screen(std::shared_ptr<Channel> channel, MessagePtr message,
                           std::optional<MessageFlags> overridingFlags)
 {
+    // Chat looks the same whether the guard is at work or not, so say once
+    // per chat that it is.
+    if (!message->flags.has(MessageFlag::Whisper))
+    {
+        const auto chat = platformName(*channel) + ':' + channel->getName();
+        if (!this->announced_.contains(chat))
+        {
+            this->announced_.insert(chat);
+            channel->addSystemMessage(
+                QStringLiteral("Spoiler guard is screening this chat."));
+        }
+    }
+
     this->held_.push_back({
         .channel = channel,
         .message = std::move(message),

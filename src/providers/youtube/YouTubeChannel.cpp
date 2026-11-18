@@ -544,27 +544,41 @@ bool YouTubeChannel::hasModRights() const
 
 void YouTubeChannel::removeSpoiler(const MessagePtr &message, bool banAuthor)
 {
-    if (!this->api_ || !this->account_ || !this->account_->isAuthenticated() ||
-        this->videoId_.isEmpty())
+    auto self = std::weak_ptr<Channel>(this->shared_from_this());
+
+    // The line stays hidden here either way. Viewers still see it when this
+    // fails, so the streamer is told, without the text or the name.
+    auto failed = [this, self](const QString &why) {
+        if (!self.expired())
+        {
+            this->addSystemMessage(
+                QStringLiteral("Spoiler guard hid a message but could not "
+                               "remove it from YouTube chat: %1")
+                    .arg(why));
+        }
+    };
+
+    if (!this->api_ || !this->account_ || !this->account_->isAuthenticated())
+    {
+        failed(QStringLiteral("you are not signed in to YouTube"));
+        return;
+    }
+    if (this->videoId_.isEmpty())
     {
         return;
     }
 
-    auto self = std::weak_ptr<Channel>(this->shared_from_this());
-
     // The Data API cannot delete a message by the id the chat page gave us, so
     // a line that only needs clearing gets the five minute timeout YouTube's
     // own moderation menu uses, which hides the author's recent messages.
-    auto ban = [this, authorChannelId = message->loginName,
+    auto ban = [this, failed, authorChannelId = message->loginName,
                 seconds = banAuthor ? std::nullopt : std::optional<int>{300}](
                    const QString &liveChatId) {
         this->api_->banUser(liveChatId, authorChannelId, seconds,
-                            [authorChannelId](bool ok, const QString &error) {
+                            [failed](bool ok, const QString &error) {
                                 if (!ok)
                                 {
-                                    qCWarning(chatterinoApp)
-                                        << "Spoiler guard could not remove"
-                                        << authorChannelId << error;
+                                    failed(error);
                                 }
                             });
     };
@@ -576,10 +590,15 @@ void YouTubeChannel::removeSpoiler(const MessagePtr &message, bool banAuthor)
     }
 
     this->api_->resolveLiveChatId(
-        this->videoId_,
-        [this, self, ban](const QString &liveChatId, const QString &) {
-            if (self.expired() || liveChatId.isEmpty())
+        this->videoId_, [this, self, ban, failed](const QString &liveChatId,
+                                                  const QString &error) {
+            if (self.expired())
             {
+                return;
+            }
+            if (liveChatId.isEmpty())
+            {
+                failed(error);
                 return;
             }
             this->liveChatId_ = liveChatId;

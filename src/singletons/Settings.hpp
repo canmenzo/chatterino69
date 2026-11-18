@@ -657,6 +657,8 @@ public:
     /// Spoiler guard: holds chat in your own channels until a model has read
     /// it, see controllers/spoilerguard/SpoilerGuard.hpp
     BoolSetting spoilerGuardEnabled = {"/spoilerGuard/enabled", false};
+    /// Your own Twitch and Kick channel names, guarded even while logged out
+    QStringSetting spoilerGuardChannels = {"/spoilerGuard/channels", ""};
     QStringSetting spoilerGuardGame = {"/spoilerGuard/game",
                                        "Grand Theft Auto VI (GTA 6)"};
     QStringSetting spoilerGuardModel = {"/spoilerGuard/model",
