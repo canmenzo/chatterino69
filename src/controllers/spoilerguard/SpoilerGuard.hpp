@@ -87,6 +87,10 @@ public:
     /// name, which may be the spoiler, so it is dropped.
     static bool removedUser(const QString &login);
 
+    /// True for a line the guard deleted. Its deletion notice quotes the
+    /// text, so it is dropped.
+    static bool removedMessage(const QString &id);
+
 private:
     explicit SpoilerGuard(QObject *parent);
 
@@ -141,6 +145,7 @@ private:
     /// reactions to what is on screen from a spoiler.
     QStringList recent_;
     QSet<QString> removedUsers_;
+    QSet<QString> removedMessages_;
     /// The chats that were told the guard is screening them.
     QSet<QString> announced_;
 

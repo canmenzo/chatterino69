@@ -5,6 +5,7 @@
 #include "controllers/accounts/AccountController.hpp"
 #include "controllers/highlights/HighlightController.hpp"
 #include "controllers/highlights/HighlightResult.hpp"
+#include "controllers/spoilerguard/SpoilerGuard.hpp"
 #include "messages/Message.hpp"
 #include "messages/MessageBuilder.hpp"
 #include "providers/twitch/eventsub/Controller.hpp"
@@ -199,7 +200,18 @@ void Connection::onChannelModerate(
                 builder->loginName = payload.event.moderatorUserLogin.qt();
                 makeModerateMessage(builder, payload.event, action);
                 auto msg = builder.release();
-                runInGuiThread([channel, msg] {
+                QString deletedID;
+                if constexpr (std::is_same_v<Action, channel_moderate::Delete>)
+                {
+                    deletedID = action.messageID.qt();
+                }
+                runInGuiThread([channel, msg, deletedID] {
+                    // This notice quotes the text, which the spoiler guard
+                    // deleted so that the streamer would not read it.
+                    if (SpoilerGuard::removedMessage(deletedID))
+                    {
+                        return;
+                    }
                     channel->addMessage(msg, MessageContext::Original);
                 });
             }

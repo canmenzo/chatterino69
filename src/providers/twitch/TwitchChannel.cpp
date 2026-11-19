@@ -957,7 +957,7 @@ void TwitchChannel::removeSpoiler(const MessagePtr &message, bool banAuthor)
         {
             channel->addSystemMessage(
                 QStringLiteral("Spoiler guard hid a message but could not "
-                               "remove its author from Twitch chat: %1")
+                               "remove it from Twitch chat: %1")
                     .arg(why));
         }
     };
@@ -971,12 +971,25 @@ void TwitchChannel::removeSpoiler(const MessagePtr &message, bool banAuthor)
         return;
     }
 
-    // Without a ban this is a one second timeout rather than a deleted
-    // message: both clear the line for every viewer, but a deletion notice
-    // quotes the text it removed.
+    if (!banAuthor)
+    {
+        // Only this line goes. A timeout, however short, strikes out
+        // everything its author wrote for every viewer. The deletion notice
+        // quotes the text, so eventsub/Connection.cpp drops it.
+        if (message->id.isEmpty() || message->flags.has(MessageFlag::Whisper))
+        {
+            return;
+        }
+        getHelix()->deleteChatMessages(
+            this->roomId(), user->getUserId(), message->id, [] {},
+            [failed](auto /*error*/, const QString &text) {
+                failed(text);
+            });
+        return;
+    }
+
     getHelix()->banUser(
-        this->roomId(), user->getUserId(), message->userID,
-        banAuthor ? std::nullopt : std::optional<int>{1},
+        this->roomId(), user->getUserId(), message->userID, std::nullopt,
         QStringLiteral("Spoiler (automatic)"), [] {},
         [failed](auto /*error*/, const QString &text) {
             failed(text);

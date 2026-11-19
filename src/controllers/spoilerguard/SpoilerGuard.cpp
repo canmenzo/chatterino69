@@ -5,6 +5,7 @@
 #include "common/QLogging.hpp"
 #include "controllers/spoilerguard/SpoilerGuardPrompt.hpp"
 #include "messages/Message.hpp"
+#include "providers/twitch/TwitchBadge.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/Paths.hpp"
 #include "singletons/Settings.hpp"
@@ -102,9 +103,21 @@ QString judgedName(const Message &message)
     return name;
 }
 
+/// A moderator, a VIP or the streamer. What they give away is still kept from
+/// the streamer, but nothing is done to them on the platform: a timeout takes
+/// a moderator's sword away, and Twitch refuses to delete their lines.
+bool isTrusted(const Message &message)
+{
+    return std::ranges::any_of(message.badges, [](const Badge &badge) {
+        return badge.key_ == u"moderator" || badge.key_ == u"lead_moderator" ||
+               badge.key_ == u"vip" || badge.key_ == u"broadcaster";
+    });
+}
+
 /// The record the streamer reads after finishing the game, to undo a ban that
 /// was a mistake. It is never shown in the client.
-void logAction(const Channel &channel, const Message &message, Verdict verdict)
+void logAction(const Channel &channel, const Message &message, Verdict verdict,
+               bool trusted)
 {
     static const char *const NAMES[] = {"shown", "unchecked", "hidden",
                                         "banned"};
@@ -120,7 +133,8 @@ void logAction(const Channel &channel, const Message &message, Verdict verdict)
     text.replace('\n', ' ').replace('\t', ' ');
     const QStringList fields{
         QDateTime::currentDateTime().toString(Qt::ISODate),
-        QString::fromLatin1(NAMES[static_cast<size_t>(verdict)]),
+        trusted ? QStringLiteral("hidden here only")
+                : QString::fromLatin1(NAMES[static_cast<size_t>(verdict)]),
         platformName(channel),
         channel.getName(),
         message.loginName,
@@ -343,6 +357,11 @@ bool SpoilerGuard::removedUser(const QString &login)
 {
     return getSettings()->spoilerGuardEnabled &&
            instance().removedUsers_.contains(login.toLower());
+}
+
+bool SpoilerGuard::removedMessage(const QString &id)
+{
+    return !id.isEmpty() && instance().removedMessages_.contains(id);
 }
 
 void SpoilerGuard::screen(std::shared_ptr<Channel> channel, MessagePtr message,
@@ -617,10 +636,16 @@ void SpoilerGuard::flush()
 
         if (verdict != Verdict::Clean)
         {
-            logAction(*channel, message, verdict);
-            if (verdict != Verdict::Unchecked)
+            const auto trusted =
+                verdict != Verdict::Unchecked && isTrusted(message);
+            logAction(*channel, message, verdict, trusted);
+            if (verdict != Verdict::Unchecked && !trusted)
             {
                 this->removedUsers_.insert(message.loginName.toLower());
+                if (!message.id.isEmpty())
+                {
+                    this->removedMessages_.insert(message.id);
+                }
                 channel->removeSpoiler(held.message, verdict == Verdict::Ban);
             }
             continue;

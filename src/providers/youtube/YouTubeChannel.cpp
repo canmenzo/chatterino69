@@ -10,6 +10,7 @@
 #include "providers/bttv/BttvEmotes.hpp"
 #include "providers/ffz/FfzEmotes.hpp"
 #include "providers/seventv/SeventvEmotes.hpp"
+#include "providers/twitch/TwitchBadge.hpp"
 #include "providers/youtube/YouTubeAccount.hpp"
 #include "providers/youtube/YouTubeApi.hpp"
 #include "singletons/Settings.hpp"
@@ -259,6 +260,16 @@ void YouTubeChannel::handleMessage(const YouTubeMessage &message)
     builder.message().id = message.id;
     builder.message().serverReceivedTime = message.timestamp;
     builder.message().flags.set(MessageFlag::YouTube);
+    if (message.author.isOwner)
+    {
+        builder.message().badges.emplace_back(QStringLiteral("broadcaster"),
+                                              QStringLiteral("1"));
+    }
+    if (message.author.isModerator)
+    {
+        builder.message().badges.emplace_back(QStringLiteral("moderator"),
+                                              QStringLiteral("1"));
+    }
 
     builder.emplace<TimestampElement>(message.timestamp.time());
 

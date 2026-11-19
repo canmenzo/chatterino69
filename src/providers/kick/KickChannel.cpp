@@ -22,6 +22,7 @@
 #include "providers/seventv/SeventvBadges.hpp"
 #include "providers/seventv/SeventvEmotes.hpp"
 #include "providers/seventv/SeventvPaints.hpp"
+#include "providers/twitch/TwitchBadge.hpp"
 #include "singletons/Settings.hpp"
 
 #include <QFile>
@@ -550,6 +551,8 @@ void KickChannel::onMessageReceived(const KickMessage &kickMessage)
     // Add badges (if any)
     for (const auto &badge : kickMessage.sender.identity.badges)
     {
+        builder.message().badges.emplace_back(badge.type,
+                                              QString::number(badge.count));
         auto [emote, flag] = KickBadges::lookup(badge.type);
         if (emote)
         {
